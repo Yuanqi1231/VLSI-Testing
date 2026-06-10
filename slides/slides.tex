@@ -48,7 +48,7 @@
             {\small 单封装 D2D 互连数}
         \column{0.31\textwidth}
             \centering
-            {\Large\textbf{$<10\,\mu$m}}\\[-2pt]
+            {\Large\textbf{$<10\,\mathrm{\mu m}$}}\\[-2pt]
             {\small 微凸点节距}
         \column{0.31\textwidth}
             \centering
@@ -177,14 +177,17 @@
         arr/.style={-{Latex[length=2.5mm]},thick}]
         \node[box,fill=gray!15] (sim) {D2D 链路\\（随机工作负载）};
         \node[box,fill=thublue!15,right=0.8cm of sim] (wave) {接收端波形\\160 UI $\times$ 8 采样};
-        \node[box,fill=green!12,anchor=west] (full) at ($(wave.east)+(1.0,1.05)$)
+        \node[box,fill=green!12,anchor=west] (full) at ($(wave.east)+(1.0,1.35)$)
             {\textbf{完整波形}（bring-up / 后硅）\\1280 点全部可见};
-        \node[box,fill=red!12,anchor=west] (lossy) at ($(wave.east)+(1.0,-1.05)$)
+        \node[box,fill=orange!20,densely dashed,anchor=west] (feat) at ($(wave.east)+(1.0,0)$)
+            {\textbf{18 维人工特征}（表征压缩档，非硬件体制）\\沿区/平台区/全波形 $\times$ 6 统计量};
+        \node[box,fill=red!12,anchor=west] (lossy) at ($(wave.east)+(1.0,-1.35)$)
             {\textbf{有损标量}（运行时）\\单个眼裕度数字};
-        \node[box,fill=yellow!20,anchor=north west] (tel) at ($(sim.south west)+(0,-1.45)$)
+        \node[box,fill=yellow!20,anchor=north west] (tel) at ($(sim.south west)+(0,-1.75)$)
             {片上遥测：温度、电压droop\\（DTS / droop monitor，已常态化）};
         \draw[arr] (sim) -- (wave);
         \draw[arr] (wave.east) -- (full.west);
+        \draw[arr,densely dashed] (wave.east) -- (feat.west);
         \draw[arr] (wave.east) -- (lossy.west);
         \draw[arr,dashed] (tel.east) -| (lossy.south);
     \end{tikzpicture}}
@@ -392,7 +395,7 @@
     \end{itemize}
 \end{frame}
 
-\begin{frame}{混杂长什么样：运行时只有一个标量时}
+\begin{frame}{正常样本与异常样本的混杂}
     \begin{columns}
         \column{0.55\textwidth}
             \includegraphics[width=\textwidth]{pic/lossy_confounder_v2.png}
@@ -408,7 +411,7 @@
     \end{columns}
 \end{frame}
 
-\begin{frame}{核心洞见：遥测的价值取决于观测的有损性}
+\begin{frame}{遥测的价值取决于观测的有损性}
     \begin{figure}
         \centering
         \includegraphics[width=0.97\textwidth]{pic/telemetry_value.png}
@@ -459,10 +462,10 @@
 \begin{frame}{局限}
     \begin{itemize}
         \item 仿真数据，物理参数有文献依据但\hl{未经实测硅校准}
-        \item 接收端为无源探测：不含 CTLE/DFE 均衡与 CDR——结论属于“焊盘原始波形”体制
-        \item 运行时的真实观测是误码序列/裕度计数，比本文的标量更粗
+        \item 接收端的简单建模：不含 CTLE/DFE 均衡与 CDR
+        \item 运行时的真实观测是误码序列/裕度计数
         \item 多标签报警的健康误报偏高 $\Rightarrow$ 需二分类健康门把守
-        \item 开集识别是公开的未解项
+        \item 开集识别揭示了故障之间的等价性
     \end{itemize}
 \end{frame}
 
