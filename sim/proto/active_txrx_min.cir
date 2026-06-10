@@ -1,0 +1,39 @@
+* Minimal active TX/RX, ngspice-46 idiom (inlined numerics, no .param/.func in B)
+* alpha-law driver: swing rides PDN node vddtx; Ron(Vrail,T,sigma); opposite n/p stress sign
+* --- TX compact PDN (droop self-induced by driver load) ---
+Vvrm   vrm 0 0.8
+Rpdn   vrm vddpre 0.02
+Lpdn   vddpre vddtx 100p
+Cdec   vddtx 0 50n
+* --- launch logic d in {0,1}: a PRBS-ish PWL ---
+Vd d 0 PWL(0 0  30p 0  31p 0.8  120p 0.8  121p 0  220p 0  221p 0.8  400p 0.8)
+* --- alpha-law push/pull into slew node vint; Kp/Kn computed in python (here T=27C sigma=0) ---
+* Kp = (1/45)*muT*(1+pi_p*sig)/(Vdd0-Vth)^alpha  with muT=1,sig=0,Vdd0=0.8,Vth=0.32,alpha=1.3
+* (0.8-0.32)^1.3 = 0.48^1.3 = 0.3776 ; Kp = (1/45)/0.3776 = 0.05884
+Cint   vint 0 200f
+Bpu    vint 0 I =  5.884e-2*pow(V(vddtx)-0.32,1.3)*V(d)*(V(vint)-V(vddtx))
+Bpd    vint 0 I =  5.884e-2*pow(V(vddtx)-0.32,1.3)*(1-V(d))*V(vint)
+Rlaunch vint pad 1m
+* --- a trivial channel stand-in (one RLC) so pad has a load like the real ladder ---
+Rs pad n1 5
+Ls n1 n2 1n
+Cs n2 0 0.4p
+Rload n2 rxpad 5
+* --- RX: passive RC CTLE, rail/2 Vref, loaded low-gain tanh slicer ---
+Vrxsup vddrx 0 0.8
+Rctle1 rxpad rxeq 200
+Cctle  rxpad rxeq 80f
+Rctle2 rxeq 0 1k
+Bvref  vref 0 V = 0.5*V(vddrx)
+Bcmp   dec 0 V = 0.4*tanh(10*(V(rxeq)-V(vref)))
+Rdec   dec 0 1k
+.ic v(vddtx)=0.8 v(vddpre)=0.8 v(vddrx)=0.8
+.control
+set noaskquit
+tran 1p 400p uic
+linearize
+wrdata /tmp/txrx_min.dat v(pad) v(rxeq) v(dec) v(vddtx)
+print v(pad)[100] v(rxeq)[100] v(dec)[100] v(vddtx)[100]
+quit
+.endc
+.end

@@ -1,0 +1,636 @@
+\documentclass[11pt,a4paper,fontset=mac]{ctexart}
+
+% ---- 版面 ----
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{multirow}
+\usepackage{tikz}
+\usepackage[RPvoltages]{circuitikz}
+\usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
+\usepackage[hidelinks]{hyperref}
+
+\captionsetup{font=small,labelfont=bf}
+\setlist{itemsep=2pt,topsep=3pt,parsep=0pt}
+\graphicspath{{sim/out/wave/}{sim/out/wave/plots/}{sim/out/wave/inspect/}}
+
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,
+        columns=fullflexible,keepspaces=true,xleftmargin=4pt}
+
+% 术语小框
+\newcommand{\term}[1]{\textbf{#1}}
+
+\title{\bfseries 基于接收波形的 Chiplet 晶粒间互连故障诊断\\
+\large 多模态遥测的价值取决于观测的有损性}
+\author{VLSI 测试课程  Mini Research Project（方向三：D2D Link 异常检测）}
+\date{2026 年 6 月}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+异构集成（heterogeneous integration）把\term{晶粒间互连}（die-to-die, D2D）变成了 chiplet
+系统的可靠性瓶颈：单封装内\term{微凸点}（micro-bump，连接相邻晶粒的微米级焊点）数以万计，
+且存在大量结构测试无法预见的在役退化模式。本项目以一个纯 \texttt{ngspice}、可完全复现的
+D2D 链路仿真器为数据源，构造了包含 10 类故障、786 条样本的\textbf{原始接收波形}数据集，
+并在其上比较了线性基线与一维卷积网络（1-D CNN）的诊断能力，完成了四组实验。
+
+主要结论有三。其一，在故障覆盖全温度区间的较难数据上，原始波形上的 CNN 达到 80.3\% 的
+十分类准确率，显著高于同样读原始波形的逻辑回归（70.2\%），也高于读 18 维人工眼图特征的
+浅层模型（$\leq$70.2\%）——说明从原始信号学习表征捕获了固定特征集会丢弃的、依赖位置且
+随故障而异的结构。其二，对两类连续漂移故障的严重度回归 $R^2$ 分别达 0.867 与 0.998。其三，
+也是本文的核心论点：温度与电压跌落是与真实故障征象重叠的\textbf{良性混杂因子}，
+\textbf{多模态遥测（温度／droop）的价值取决于主观测的有损程度}。当模型可见完整波形时遥测近乎
+冗余；而在运行时真正可得的\textbf{有损标量观测}（单个眼裕度）下，单阈值规则无法兼顾低误报与
+高检出——在零误报工作点其故障检出率仅 58.7\%，而融合温度的学习边界在同样零误报下达到 72.0\%。
+这把“多模态融合是否有用”从口号变成一个有判决条件的结论，也直接回应了课程对“AI 何时有效、
+何时不必要”的要求。
+\end{abstract}
+
+% =====================================================================
+\section{引言与背景}
+
+\subsection{为什么 D2D 互连成为可靠性瓶颈}
+先进制程的经济性推动系统从单片大芯片走向\textbf{多 chiplet 解耦 + 中介层（interposer）/桥
+（bridge）重新集成}。单封装内的 D2D 互连数量已从早期产品的不足一千攀升到近年高端产品的近十万，
+I/O 密度向每平方毫米上万演进，凸点节距（pitch，相邻凸点中心间距）跌破 10\,$\mu$m。每一根互连都要
+穿过微凸点、再分布层（RDL）乃至硅通孔（TSV），因此一个封装拥有成千上万个相互独立的失效机会。
+其中相当一部分缺陷只在\textbf{部署之后}才显现：电迁移、C4 凸点的热机械疲劳、晶体管阈值的
+NBTI/PBTI 漂移、封装翘曲诱发的成簇缺陷等。
+
+\subsection{为什么需要在役（in-field）健康评估，而非仅靠一次性结构测试}
+工业界对 chiplet 互连的主流测试是\term{结构测试}：通过 IEEE~1838 的晶粒包装寄存器加载确定性图案、
+捕获 pass/fail、用备用 lane 修复。它严谨，但本质上是\textbf{制造时的一次性活动}，无法观测在役才
+发展出来的\textbf{弱、参数化、漂移、老化}类失效——这些失效表现为时序裕度的缓慢退化而非确定的
+逻辑错误，只有持续监测眼裕度、误码率、lane 偏斜的运行时监控才能捕获。
+
+\subsection{混杂：单一健康信号天然有歧义}
+D2D 链路不是孤立退化的。它的眼裕度与误码率会被\term{供电跌落}（supply droop，负载瞬变导致的电源
+电压下陷）与\term{温度漂移}同时调制：一次温升或一次重负载 droop 都会\textbf{闭合眼图}，其征象与真实
+缺陷重叠。因此，要把“良性环境波动”与“萌生缺陷”区分开，本质上需要把环境共模建模并扣除——这正是
+本项目要量化研究的核心问题，也是“为什么需要一个能融合多模态信号的统计模型”的根源。
+
+% =====================================================================
+\section{问题定义}
+
+\paragraph{测试问题。} 给定一条 D2D 链路在某工况下采集到的\textbf{接收端模拟波形}，
+自动判别其故障类型（10 类，含“健康”），并对连续退化故障做\textbf{严重度回归}；同时回答：
+当运行时只能得到极有损的观测（如一个眼裕度标量）时，加入片上温度／droop 遥测能否抑制由良性高应力
+导致的误报。
+
+\paragraph{输入与输出。} 输入为一维 RX 波形（128 个\term{单位间隔}（unit interval, UI，
+一个比特占据的时间窗，本文 UI$=62.5$\,ps）$\times$ 每 UI 8 个采样 $=1024$ 点），可选叠加标量遥测
+$[\text{温度},\text{droop}]$；输出为 10 类 softmax（诊断）、连续严重度（回归）、或健康/故障二分类
+（有损检测）之一。
+
+\paragraph{两种观测体制（本文的关键自变量）。}
+\begin{itemize}
+\item \textbf{完整波形}（诊断/后硅 bring-up 态）：模型可见 1024 点全波形。对应文献中的眼图-CNN、
+波形自编码器，是片上眼图监测或示波采样可达的信息上限。
+\item \textbf{有损标量}（运行时真实可得）：把波形压成\textbf{单一眼裕度标量}，模拟片上裕度寄存器实际
+能提供的信息。
+\end{itemize}
+区分这两种体制是诚实建模的要求，也是核心洞见的来源：原始模拟波形并非运行时遥测，运行时真正可得的是
+有损的标量/计数。
+
+\subsection{故障的判定：未显著恶化 BER/时延的退化算不算故障？}\label{sec:faultdef}
+这是一个必须先回答的定义问题。测试理论区分四个概念：\term{缺陷}（defect，物理瑕疵）、\term{故障}
+（fault，缺陷的电学/模型化表现）、\term{差错}（error，某次输出取值错误）、\term{失效}（failure，
+偏离规格的可观测服务中断）。\textbf{误码率（BER）抬升或时延越限属于 error/failure 层面，而故障是
+参数层面的偏离}——二者不是一回事。
+
+本文据此以“\textbf{某物理/电学参数偏离其健康分布}”来判定故障，\textbf{而非}以“当前是否已造成显著
+BER/时延恶化”来判定。理由有三：
+\begin{enumerate}
+\item \textbf{潜伏/萌生故障（latent/incipient fault）}：一个尚未引发误码、但已侵蚀时序与电压裕度的退化，
+会在老化、温度升高或电压漂移叠加时越过阈值而失效。在役健康监测的价值，恰恰在于\textbf{在其演变为 failure
+之前}就捕获它——这正是本项目区别于一次性 pass/fail 结构测试的出发点。
+\item \textbf{BER 是滞后且饱和的指标}：健康链路 BER$\approx0$，许多萌生故障要到很晚才抬升 BER（本仿真在
+无噪声时 BER 恒为 $10^{-300}$，正说明它不能用作早期判据）。因此本文转而读\textbf{波形形状}并对连续故障做
+\textbf{严重度回归}，在越限阈值\emph{以下}就量化退化程度（见 \texttt{r\_drift}/\texttt{c\_drift} 的回归）。
+\item \textbf{但须与良性环境波动区分}：温度/droop 同样压低眼图却\textbf{不是}故障。所以“眼变差”不等于
+“有故障”；判据是\textbf{底层参数是否异常偏移}，而非眼图是否变差——这正是本文混杂去除与根因分类的意义。
+\end{enumerate}
+\textbf{结论}：在本框架中，一个低严重度、BER 仍$\approx0$ 的 \texttt{r\_drift}/\texttt{c\_drift}/
+\texttt{bump\_void\_aging} \textbf{仍算故障（潜伏态）}，而且是最值得提前检出的对象；反之，一条高温下 BER
+略升的健康链路\textbf{不算}故障。这一定义使“严重度回归”和“混杂去除”成为问题的内在组成，而非附加项。
+
+\paragraph{为何 AI 适合。} 正常工作流形高维、且与工艺-电压-温度（PVT）强相关；标注的现场失效样本稀缺；
+退化是渐进的。这类“学正常、判偏离 + 多模态去混杂”的问题，与课程推荐的自编码器/LSTM/统计异常检测同源。
+更具体的“为什么必须用学习模型而不是阈值或人工特征”，将在第~\ref{sec:why} 节用专门实验回答。
+
+% =====================================================================
+\section{仿真数据源与故障建模}
+
+\subsection{链路仿真器与电路结构}
+数据源是一个纯 \texttt{ngspice}（无任何商业 EM/AMI 工具）、纯标准库 Python 封装的 D2D 链路仿真器。
+图~\ref{fig:schematic} 给出受害（victim）lane 的等效电路：行为级驱动经温度相关输出电阻
+$R_\text{on}(T)$ 启动一个分段线性（PWL）电压摆，依次穿过发送端微凸点（$R_b{+}L_b{+}C_b$）、
+$N{=}20$ 段 \term{RLGC 阶梯}、接收端微凸点，到达接收节点（RX 焊盘电容 $C_\text{rx}$ 与轻终端 $R_\text{term}$）。
+
+\term{RLGC 阶梯}指把一段分布参数传输线离散为 $N$ 个集总单元，每单元含串联电阻 $R_\text{seg}$、串联电感
+$L_\text{seg}$、对地电容 $C_\text{node}$（电导 $G$ 在本短链路可忽略），用以近似传输线的频变损耗与时延。
+每段取自每毫米线参数：$R'{=}0.35\,\Omega/\text{mm}$、$L'{=}0.45\,\text{nH/mm}$、$C'{=}0.18\,\text{pF/mm}$，
+线长 $2\,$mm，故 $R_\text{seg}{=}0.035\,\Omega$、$L_\text{seg}{=}0.045\,$nH、$C_\text{node}{=}0.018\,$pF。
+相邻两条 \term{aggressor}（干扰源）lane 通过逐节点耦合电容 $C_c$（$C_c'{=}0.030\,$pF/mm）注入
+\term{串扰}（crosstalk，邻线翻转经容性耦合在受害线上产生的噪声）。关键工艺参数取 UCIe 级短距低摆幅
+单端（single-ended, SE）信号：$V_\text{dd}{=}0.8\,$V，速率 $16\,$GT/s（故 UI$=62.5\,$ps），
+$Z_0{=}50\,\Omega$，导体电阻带铜温度系数 $t_{c1}{=}3.9\times10^{-3}/^\circ$C。
+
+\begin{figure}[t]\centering
+\resizebox{0.98\textwidth}{!}{%
+\begin{circuitikz}[american,line width=0.7pt,every label/.style={font=\scriptsize}]
+\def\gnd{-2.0}
+% ---- driver ----
+\draw (0,0) to[V=$v_\text{drv}$] (0,\gnd) node[ground]{};
+\draw (0,0) to[R=$R_\text{on}(T)$] (2.4,0) coordinate(txo) node[above=2pt]{\scriptsize txo};
+% ---- TX micro-bump (dashed box) ----
+\draw[dashed,gray] (2.55,-0.6) rectangle (5.05,0.6);
+\node[gray] at (3.75,0.95) {\scriptsize TX 微凸点};
+\draw (txo) to[R=$R_b$] (3.75,0) to[L=$L_b$] (5.0,0) coordinate(n0) node[above=2pt]{\scriptsize n0};
+\draw (n0) to[C=$C_b$] (5.0,\gnd) node[ground]{};
+% ---- one RLGC segment ----
+\draw (n0) to[R=$R_\text{seg}$] (6.7,0) coordinate(nm) to[L=$L_\text{seg}$] (8.3,0) coordinate(nk);
+\draw (8.3,0) to[C=$C_\text{node}$] (8.3,\gnd) node[ground]{};
+% coupling cap up to an aggressor rail
+\draw (nm) to[C=$C_c$] (6.7,1.7) node[above]{\scriptsize aggressor 节点};
+% span bracket + label BELOW the grounds (clear of every element)
+\draw[gray,|-|] (5.0,-2.55) -- (8.3,-2.55);
+\node[gray,below=0pt] at (6.65,-2.6) {\scriptsize $N{=}20$ 段 RLGC 阶梯};
+% repetition dots in a broken span
+\draw (nk) -- (8.65,0);  \draw (9.35,0) -- (9.7,0) coordinate(nN);
+\node at (9.0,0) {\large$\cdots$};
+% ---- RX micro-bump (dashed box) ----
+\draw[dashed,gray] (9.75,-0.6) rectangle (12.25,0.6);
+\node[gray] at (10.95,0.95) {\scriptsize RX 微凸点};
+\draw (nN) to[R=$R_b$] (10.95,0) to[L=$L_b$] (12.2,0) coordinate(rxo) node[above=2pt]{\scriptsize rxo};
+% ---- RX load (Crx to ground; Rterm to a separate mid-rail) ----
+\draw (rxo) to[C=$C_\text{rx}$] (12.2,\gnd) node[ground]{};
+\draw (rxo) -- (14.4,0) coordinate(rt);
+\node[above] at (13.3,0.15) {\scriptsize 采样 $v$(rxo)};
+\draw (rt) to[R=$R_\text{term}$] (14.4,\gnd);
+\draw (14.1,\gnd) -- (14.7,\gnd);                 % mid-rail bar
+\node[below=1pt] at (14.4,\gnd) {\scriptsize 中位轨 $V_\text{dd}/2$};
+\end{circuitikz}}
+\caption{受害 lane 的 ngspice 等效电路（单端）。温度相关驱动 $R_\text{on}(T)$ 启动 PWL 摆；
+信号经 TX 微凸点（$R_b{+}L_b{+}C_b$）、$N{=}20$ 段 RLGC 阶梯（逐节点对地电容 $C_\text{node}$，并经
+$C_c$ 与相邻 aggressor 耦合）、RX 微凸点，到达接收节点（$C_\text{rx}$ + 终端 $R_\text{term}$ 接中位
+电平 $V_\text{dd}/2$）。故障注入即在指定段位修改 $R_\text{seg}$、$L_\text{seg}$、$C_\text{node}$、$C_c$
+或驱动摆幅（见表~\ref{tab:faultparam}）。}\label{fig:schematic}
+\end{figure}
+
+\subsection{为支撑本研究而做的三项物理扩展}
+基础仿真器只能输出干净眼图，不足以表达混杂与连续退化。为此扩展三点：
+
+\begin{enumerate}
+\item \textbf{瞬态电阻热噪声。} 在受害 lane 的各电阻上串入 \texttt{trnoise}（时域热电动势源），其
+RMS 正比于 $\sqrt{4k_BTR\,\Delta f}$（Johnson--Nyquist 热噪声，$k_B$ 为玻尔兹曼常数，$T$ 温度，
+$R$ 电阻，$\Delta f$ 等效带宽）。物理含义：噪声随 $\sqrt{T}$ 随温度上升（构成混杂），随 $\sqrt{R}$
+随阻性故障上升（故障自带噪声指纹）。这同时修复了无噪声时误码率恒为 $10^{-300}$ 的退化值。
+\item \textbf{温度相关驱动电阻 $R_\text{on}(T)$。} 取 $R_\text{on}(T)=R_\text{on,0}\,(T/T_0)^{1.5}$（迁移率
+退化）。\textbf{这是温度闭合一条匹配良好短链路眼图的主导机制}：本链路导体电阻仅 $0.7\,\Omega$，相对
+$45\,\Omega$ 驱动电阻与 $80\,\Omega$ 终端可忽略，若不引入 $R_\text{on}(T)$，温度在波形上几乎不可观测。
+引入后健康\term{眼高}（eye height，眼图睁开的垂直电压幅度）由 504\,mV 降至 419\,mV（27$\to$110$^\circ$C）。
+\item \textbf{连续漂移故障 + 良性可观测 droop。} 新增 \texttt{r\_drift}（分布式串联电阻，$[15,150]\,\Omega$）
+与 \texttt{c\_drift}（并联电容膨胀），作为严重度回归目标；并加入一个\textbf{良性、可观测}的工况 droop
+（记入 \texttt{vdroop\_frac} 遥测列，区别于作为故障的 \texttt{supply\_droop}），作为第二个混杂因子。
+\end{enumerate}
+
+\subsection{故障模型：改变了哪些参数、取值范围如何}
+每一类故障都对应图~\ref{fig:schematic} 中某个具体元件值的改变，并带一个明确的\textbf{严重度轴}。
+表~\ref{tab:faultparam} 给出每类故障改变的参数、标称值、故障取值范围与注入位置；下文再就几类需要展开
+建模的故障做说明。\term{眼裕度}（eye margin）在本文定义为有效区间内波形电平的第 90 与第 10 百分位之差，
+近似眼图的垂直张开度。
+
+\begin{table}[h]\centering\footnotesize
+\caption{十类故障的注入参数、标称值与取值范围（段编号 $k\in[0,19]$；位置即注入的段下标。连续类
+\texttt{r\_drift}/\texttt{c\_drift} 用方括号给出连续区间，其余为离散级别）}\label{tab:faultparam}
+\setlength{\tabcolsep}{3pt}\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}p{2.4cm}p{3.0cm}p{1.35cm}p{4.5cm}p{2.65cm}@{}}
+\toprule
+类别 & 改变的参数 & 标称值 & 故障取值（级数） & 位置/温度 \\
+\midrule
+healthy & 无注入 & —— & —— & $T\in\{27,45,65,$ $85,100,110\}^\circ$C \\
+resistive\_\allowbreak open & 单段串阻 $+\,r_o$ & $0.035\,\Omega$ & $r_o\in\{20,50,$ $150,500\}\,\Omega$ (4) & 段 5、14 \\
+bump\_\allowbreak void\_\allowbreak aging & 单段串阻 $+\,r_o$（缓增） & $0.035\,\Omega$ & $r_o\in\{5,20,$ $40,80\}\,\Omega$ (4) & 段 5；$T\in\{85,110\}$ \\
+bridge\_\allowbreak short & 并联阻 $R_\text{brg}$ 到邻线 & 开路 & $R_\text{brg}\in\{50,200,$ $800,3000\}\,\Omega$ (4) & 节点 10 \\
+crosstalk\_\allowbreak cap & 耦合容 $\times f$ & $0.003\,$pF & $f\in\{2,4,8\}$ (3) & 全部节点 \\
+supply\_\allowbreak droop & 发送摆幅 $\times(1{-}d)$ & $0.8\,$V & $d\in\{0.05,0.10,$ $0.15,0.20\}$ (4) & 驱动 \\
+hotspot & 5 段局部温+串阻 & 全局 $T$ & $T_\text{hot}\in\{120,150\}^\circ$C (2) & 段 8--12 \\
+impedance\_\allowbreak discontinuity & 3 段电感 $\times z$ & $0.045\,$nH & $z\in\{0.4,0.6,$ $1.8,3.0\}$ (4) & 段 7--9 \\
+r\_\allowbreak drift & 全段串阻 $+\Delta R/N$ & $0.7\,\Omega$ 总 & $\Delta R\in[15,150]\,\Omega$ (7) & 全段分布 \\
+c\_\allowbreak drift & 全节点容 $\times(1{+}c)$ & $0.018\,$pF & $c\in[0.3,2.5]$ (7) & 全部节点 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{阻性类（resistive\_open / bump\_void\_aging / r\_drift）。}
+三者共享“串联电阻增大$\Rightarrow$分压衰减$\Rightarrow$幅度下降”的机制，区别在\textbf{空间分布与时间尺度}：
+\texttt{resistive\_open} 是单段集总大阻（突发缺陷，$20$--$500\,\Omega$，约为标称段阻的 $10^3$--$10^4$ 倍）；
+\texttt{bump\_void\_aging} 是同形式但幅度较小、随老化缓增（$5$--$80\,\Omega$，且只在高温 $85/110^\circ$C 取样，
+模拟在役热场下的电迁移/空洞）；\texttt{r\_drift} 把总附加阻 $\Delta R$ \textbf{均分到全部 20 段}
+（$R_\text{seg}\mathbin{+}{=}\Delta R/N$），表示整条线均匀老化，$\Delta R\in[15,150]\,\Omega$ 提供一条连续严重度轴。
+
+\paragraph{容性类（c\_drift / crosstalk\_cap）。} \texttt{c\_drift} 把每个对地节点电容乘 $(1{+}c)$，
+$c\in[0.3,2.5]$，增大充放电时间常数$\Rightarrow$跳变沿变缓、码间串扰（ISI）加重，是第二条连续严重度轴；
+\texttt{crosstalk\_cap} 把受害线与两条 aggressor 间的逐节点耦合电容乘 $f\in\{2,4,8\}$，邻线翻转时在受害线
+平台/沿处注入更强的容性噪声。
+
+\paragraph{反射类（impedance\_discontinuity）。} 在连续 3 段把段电感 $L_\text{seg}$ 乘 $z$
+（$z{<}1$ 降阻抗、呈容性；$z{>}1$ 升阻抗、呈感性），形成局部特征阻抗台阶 $Z{=}\sqrt{L/C}$ 的失配。
+其能量主要进入\textbf{反射}而非幅度衰减，故在眼图幅度上几乎不可见——这是后文区域消融中它“仅在跳变沿可检、
+平台区 0.00”的物理根源，也是单一幅度度量天生覆盖不到的一类。
+
+\subsection{供电跌落（supply droop）的建模}
+\term{供电跌落}（supply droop）指负载电流瞬变在供电网络（PDN）的电阻与电感上产生压降，使驱动看到的电源
+轨瞬时下陷，从而\textbf{降低发送摆幅}、闭合眼图。本数据集用的理想前端把它建为对发送 PWL 摆幅的乘性缩放
+$V_\text{swing}\!\leftarrow\!V_\text{dd}(1{-}d)$。需区分两种 droop：
+\begin{itemize}
+\item \textbf{良性工况 droop}（混杂因子，非故障）：正常负载活动造成的可观测 IR 压降，$d_\text{benign}\in\{0,0.05,0.10\}$，
+记入遥测列 \texttt{vdroop\_frac}。它像衰减类故障一样压低眼图，但属正常工况，是融合模型用来\textbf{拒绝误报}的依据。
+\item \textbf{supply\_droop 故障}：一次无法由工况解释的、更大的额外跌落 $d\in\{0.05,0.10,0.15,0.20\}$，
+叠加在良性 droop 之上。
+\end{itemize}
+（仿真器另有一条行为级有源前端，把 droop 建为显式 PDN：稳压源经 $R_\text{pdn}{=}20\,\text{m}\Omega$、
+$L_\text{pdn}{=}100\,$pH 到去耦电容 $C_\text{dec}{=}50\,$nF，并由一个与数据相关的同步开关电流负载
+（SSO）真实地把电源轨拉低，产生静态 IR 压降与 $L\,di/dt$ 首跌振铃。本研究数据集采用理想前端的等效摆幅缩放，
+以保证大批量仿真的数值稳健与可复现。）
+
+\subsection{热点（hotspot）与温度的建模}
+全局\textbf{芯片温度} $T$ 通过 ngspice 的 \texttt{.temp} 卡作用于三处：导体电阻经铜温度系数 $t_{c1}$ 升高、
+驱动输出电阻经 $R_\text{on}(T)$ 升高（主导项）、热噪声 RMS 经 $\sqrt{T}$ 升高。\texttt{healthy} 与各故障都在
+$27$--$110^\circ$C 取样，使温度成为贯穿所有类的混杂变量而非某类的标志。
+
+\textbf{hotspot 故障}建模一个\emph{局部}热区：在中心段 $\pm2$（共 5 段，段 8--12）把这些电阻实例的温度
+\textbf{钉在} $T_\text{hot}\in\{120,150\}^\circ$C（高于全局 $T$），并叠加一项随过热量增长的局部串阻
+$\Delta R_\text{seg}=\max(0,(T_\text{hot}{-}90)\!\cdot\!2)/5$（模拟空洞/自热引起的电迁移退化，使该热事件在眼图上
+可检）。例如 $T_\text{hot}{=}120^\circ$C 时每段加 $12\,\Omega$、五段合计 $60\,\Omega$。局部温度本身因导体阻很小
+而影响有限，故 hotspot 的可观测征象主要来自这条局部串阻。
+
+\subsection{温度与 droop 遥测“如何被测量”}
+表~\ref{tab:tele}--\ref{tab:rule} 用到的两路标量遥测，其语义与来源如下：
+\begin{itemize}
+\item 在\textbf{仿真}中它们是\emph{受控的潜变量}：温度即每次仿真设定的 \texttt{.temp} 值（按 $27$--$110^\circ$C 网格扫），
+良性 droop 即设定的摆幅缩减 $d_\text{benign}$；二者作为\textbf{真值}分别写入数据集的 \texttt{temp\_C}、
+\texttt{vdroop\_frac} 两列。它们是“可测但有噪声、与故障征象重叠”的环境共模量，而非故障标签。
+\item 在\textbf{真实芯片}中它们对应成熟的片上监测电路：温度由片上\textbf{数字温度传感器}（DTS，基于 BJT/二极管
+的热敏单元）给出；供电跌落由片上\textbf{电压跌落监测器 / 关键路径监测器}（droop monitor / critical-path monitor）
+给出。也就是说，本文“融合遥测”所需的两路信号在现代 SoC 中本就常态化采集，方法不依赖额外的专用探针。
+\end{itemize}
+
+\subsection{数据集}
+数据集规模 786 条、每条 1024 点。故障\textbf{跨 27/85/110$^\circ$C 全温度区间}采样——这一点对混杂结论
+至关重要：若故障只出现在某些温度，模型会学到“高温$\Rightarrow$健康”的标签捷径，混杂结论便成为假象。
+健康类覆盖 27--110$^\circ$C 的密集温度网格。每个 (故障,参数,温度) 组合用 6 个不同的噪声种子重复（并循环施加
+3 档良性 droop），所有样本共用同一条\term{PRBS}（伪随机比特序列）发送图案（固定随机种子），使故障与噪声成为
+唯一变化源，并使“跳变沿区/稳态平台区”的掩膜对所有样本一致。单条波形仿真加重采样约 1.2\,s，全数据集约
+16\,min；脚本公开，无需任何工业数据。
+
+图~\ref{fig:eyes} 给出每类故障的眼图：健康为清晰睁开的眼，阻性/droop 类幅度坍缩，\texttt{c\_drift}
+沿变缓，\texttt{crosstalk} 模糊，\texttt{impedance\_discontinuity} 在幅度上几乎不可见。
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{eyes.png}
+\caption{每类故障的接收端眼图（折叠 2 UI）。阻抗不连续属反射域故障，在幅度域几乎不可见，对应后文
+区域消融中其“平台区准确率 0.00”的结果。}\label{fig:eyes}
+\end{figure}
+
+% =====================================================================
+\section{方法：诊断如何进行}\label{sec:method}
+
+本节详细说明诊断的完整数据通路、模型结构、前向计算与三组消融的设计，使流程可被精确复现。
+
+\subsection{从波形到判决的完整通路}
+\begin{enumerate}[label=\textbf{步骤\arabic*.}]
+\item \textbf{采集与重采样。} 对每次仿真，取受害 lane 接收节点电压 $v(t)$，用线性插值重采样到统一栅格
+$t_k = k\cdot(\text{UI}/8),\ k=0,\dots,1023$。统一栅格保证所有样本等长、且比特相位一一对齐，从而后续的
+区域掩膜对所有样本一致。
+\item \textbf{标准化。} 以训练集的全局均值与标准差对波形做 $z$-标准化，消除整体幅度尺度，使模型关注形状。
+\item \textbf{有效区裁剪。} 丢弃前 \texttt{settle\_bits} 个用于填充信道的比特，仅保留稳态有效区（960 点）。
+\item \textbf{特征提取（卷积干路）。} 见 \S\ref{sec:cnn}。
+\item \textbf{判决头。} 卷积特征（可选拼接遥测）经两层多层感知机（MLP）映射到 10 维 logit，取 softmax 后
+\texttt{argmax} 即为预测类别；严重度回归则换成单一线性输出 + 均方误差。
+\end{enumerate}
+
+\subsection{卷积网络结构与前向计算}\label{sec:cnn}
+诊断主模型是一维 CNN，结构如下（输入为 $1\times 960$ 的单通道波形）：
+\begin{center}\small
+$\text{Conv1d}(1\to16,k{=}7)\to\text{ReLU}\to\text{MaxPool}_2
+\to\text{Conv1d}(16\to32,k{=}5)\to\text{ReLU}\to\text{MaxPool}_2
+\to\text{Conv1d}(32\to64,k{=}3)\to\text{ReLU}$
+\end{center}
+随后在时间维上做\textbf{平均池化与最大池化并拼接}得到 $128$ 维向量：
+\[
+\mathbf{f} = \big[\;\underbrace{\textstyle\frac{1}{T}\sum_t z_{:,t}}_{64\text{ 维, 均值}}\;\big\|\;
+\underbrace{\max_t z_{:,t}}_{64\text{ 维, 极值}}\;\big]\quad(\big\|\text{ 表示拼接}).
+\]
+拼接两种池化的动机有明确物理含义：\textbf{平均池化}保留稳态电平/幅度指纹（阻性、droop 类故障的判别
+信息在此），\textbf{最大池化}保留峰值与跳变沿信息（串扰、阻抗不连续的信息在此）。仅用全局平均池化会
+把波形塌缩为均值、丢失幅度与极值的区分——实测中这正是早期 CNN 不如线性基线的原因。
+随后（若启用遥测融合）把标量遥测 $[\text{温度}/100,\ \text{droop}\times10]$ 拼到 $\mathbf{f}$ 后，
+经 $\text{Linear}(128(+2)\to64)\to\text{ReLU}\to\text{Linear}(64\to10)$ 得到 logit。
+
+\paragraph{训练细节。} 交叉熵损失采用\textbf{逆频率类权重}（健康等少数类被加权），Adam 优化器
+（$\text{lr}=2\times10^{-3}$，权重衰减 $10^{-4}$），120 个 epoch，批大小 32。数据按类别分层 75/25 划分
+（训练 588 / 测试 198），随机种子固定。
+
+\subsection{循环网络（LSTM）对照}\label{sec:lstm}
+波形本质是时间序列，因此课程推荐的另一类模型——\term{LSTM}（长短期记忆网络，一种带门控记忆单元、能沿
+时间逐点累积状态的循环神经网络）——是 CNN 之外的自然选择。我们以相同的有效区波形为输入训练一个 2 层
+LSTM（隐藏维 64，沿时间每 2 个采样取 1 个以控制序列长度），取末层最后时刻的隐藏状态经同样的两层 MLP 头
+输出类别；可选地在 MLP 头处拼接温度/droop 遥测。CNN 与 LSTM 的差异在归纳偏置：CNN 用\textbf{平移不变的
+局部卷积核 + 池化}抓取“波形某处的局部形状”，LSTM 用\textbf{时序递归}抓取“沿时间累积的依赖”。二者的对比
+用于检验结论不依赖单一架构。
+
+\subsection{对照方法}
+\begin{itemize}
+\item \textbf{线性基线}：多项逻辑回归，输入为标准化后的原始波形（或标量），输出为类别。它衡量“故障是否
+线性可分”。
+\item \textbf{人工特征基线}（\S\ref{sec:why} 新增）：不读原始波形，而是抽取 18 维标准眼图特征
+（均值电平、眼裕度、标准差、最大压摆率、第 10/90 百分位，分别在全/沿/平台三区计算），训练同样的逻辑
+回归与一个小 MLP。它衡量“从原始信号学表征相比经典特征工程是否更优”。
+\item \textbf{单阈值规则}（\S\ref{sec:why} 新增）：有损体制下，模拟测试工程师最自然的非学习替代——
+“若眼裕度 $<\tau$ 则判为故障”。
+\end{itemize}
+
+\subsection{三组消融的设计}
+\begin{itemize}
+\item \textbf{遥测消融}：A（仅波形）对 B（波形 + 温度/droop），在\textbf{两种观测体制}下分别做，比较总体
+准确率、高应力子集准确率、健康误报率。
+\item \textbf{区域消融}：分别仅用\textbf{沿区}（跳变沿 $\pm0.5$\,UI 窗）、仅用\textbf{平台区}、与全波形训练
+CNN（掩膜由固定比特序列导出，对所有样本一致），定位“故障特征住在波形何处”；为稳健起见对每种区域做
+3 次重初始化取均值$\pm$标准差。
+\item \textbf{严重度回归}：在 \texttt{r\_drift}/\texttt{c\_drift} 子集上，用同一卷积干路换单输出 + MSE，
+预测归一化严重度。
+\end{itemize}
+
+% =====================================================================
+\section{实验结果}
+
+\subsection{故障诊断（10 类，测试集 $n=198$）}
+\begin{table}[h]\centering\small
+\caption{十分类诊断结果（测试集）。macro-F1 为各类 F1 的非加权平均，对类不平衡更敏感}\label{tab:diag}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+模型 & 准确率 & macro-F1 \\
+\midrule
+单一眼裕度标量 + 逻辑回归 & 0.222 & 0.209 \\
+多数类基线（floor） & 0.182 & —— \\
+人工眼图特征（18 维）+ 逻辑回归 & 0.672 & —— \\
+人工眼图特征（18 维）+ MLP & 0.702 & —— \\
+逻辑回归（原始波形） & 0.702 & —— \\
+LSTM（原始波形） & 0.596 & 0.575 \\
+\textbf{1-D CNN（原始波形）} & \textbf{0.803} & \textbf{0.788} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+CNN 较所有浅层/人工特征方法高约 10 个百分点，也明显高于 LSTM。\textbf{LSTM 反而低于 CNN}（0.596 对 0.803）：
+判别信息是“波形特定相位处的局部形状”，CNN 的平移不变卷积核加池化能直接抓取，而 LSTM 须把约 480 步序列
+压进末时刻隐藏状态、易丢失精确的局部幅度，且在 588 条样本上更难训练。这与课程“不卷模型、归纳偏置要匹配
+信号”的导向一致：合适的结构（CNN）比更复杂的结构（LSTM）更重要。表首两行（单标量 0.222、多数类 0.182）
+将在第~\ref{sec:why} 节用于回答“常规方法只能做二分类、而学习模型能给出根因”这一命题。
+混淆矩阵（图~\ref{fig:confusion}）显示 \texttt{crosstalk}、\texttt{c\_drift} 近乎完美；几类串阻幅度故障
+（\texttt{resistive\_open}/\texttt{r\_drift}/\texttt{bump\_void\_aging}）之间存在可理解的混淆。
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.62\textwidth]{confusion_cnn.png}
+\caption{CNN 在原始波形上的混淆矩阵。串阻类之间的混淆源于它们共享“幅度下降”这一征象。}\label{fig:confusion}
+\end{figure}
+
+\subsection{严重度回归}
+\begin{table}[h]\centering\small
+\caption{连续漂移故障的严重度回归}\label{tab:sev}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+故障 & 归一化 MAE & $R^2$ \\
+\midrule
+r\_drift（分布式串阻） & 0.107 & 0.867 \\
+c\_drift（并联电容） & 0.012 & \textbf{0.998} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\texttt{c\_drift} 严重度几乎完美可回归；\texttt{r\_drift} 略低，因其与温度同样表现为串阻、存在轻度混杂
+（这一混杂正是下一节遥测价值的根源）。
+
+\subsection{遥测消融：多模态融合的价值取决于观测的有损性}\label{sec:tele}
+\paragraph{这个实验回答什么、不回答什么。} 需要先澄清，以免误读：本小节回答的是\textbf{“在什么条件下，
+融合温度/droop 这类环境遥测才有用”}——这是一个关于\textbf{观测与数据融合}的问题，\textbf{不是}“为什么需要
+机器学习”的问题（后者在第~\ref{sec:why} 节用独立实验回答）。两者是正交的：前者关乎\emph{问题为何难}（环境共模
+使健康信号产生歧义），后者关乎\emph{解法为何要用学习模型}。
+
+还需说明，温度能闭合眼图\textbf{不是我们为了制造结论而人为设的数据假象}，而是一个有物理依据的机制：温度升高使
+载流子迁移率退化、驱动输出电阻 $R_\text{on}(T)$ 上升（§3.5），这在真实低摆幅链路中确实会压低眼幅。我们做的只是
+把这个\textbf{真实的混杂}显式建进仿真，再问“当主观测有损时，遥测能否把它扣除”。因此结论是关于融合价值的、
+而非关于数据生成方式的。
+
+\begin{table}[h]\centering\small
+\caption{遥测消融：A（仅信号）对 B（信号 + 温度/droop），两种观测体制。FA 指误报率}\label{tab:tele}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\multirow{2}{*}{观测体制} & \multirow{2}{*}{方法} & \multicolumn{2}{c}{总体准确率} & \multicolumn{2}{c}{健康误报率} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+ & & A & B & A & B \\
+\midrule
+完整波形 & 波形 / +遥测 & 0.803 & \textbf{0.864} & 0.333 & 0.333 \\
+有损标量眼裕度 & 裕度 / +遥测 & 0.707 & 0.732 & \textbf{0.375} & \textbf{0.000} \\
+\bottomrule
+\end{tabular}\\[2pt]
+\footnotesize 注：有损体制的健康误报率为“高应力健康”子集（温度 $\geq85^\circ$C 或 droop $\geq5\%$）上的误报。
+\end{table}
+
+完整波形已隐含温度/droop（它们闭合眼图），故遥测多为冗余、仅小幅提升总体；而在运行时只剩一个眼裕度
+标量时，\textbf{良性高应力链路与真实故障在该标量上重叠}（图~\ref{fig:lossy} 灰带区），单看裕度必然误报，
+加入温度/droop 后误报被完全消除。这正是多模态融合在 D2D 在役监测中的价值边界。
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.6\textwidth]{lossy_confounder.png}
+\caption{有损观测下的混杂分离。横轴是运行时唯一可得的眼裕度标量，纵轴是温度遥测。灰带内健康（绿）与
+故障（红）在裕度上重叠——任何单一裕度阈值都无法分开；加入温度这一维后二者可分。}\label{fig:lossy}
+\end{figure}
+
+\subsection{区域消融：判别信息住在波形何处}
+\begin{table}[h]\centering\small
+\caption{区域消融（3 次重初始化，均值$\pm$标准差）}\label{tab:region}
+\begin{tabular}{@{}lc@{}}
+\toprule
+训练所用区域 & 准确率 \\
+\midrule
+全波形 & $0.806\pm0.019$ \\
+仅沿区（signal） & $0.785\pm0.023$ \\
+仅平台区（held） & $0.660\pm0.041$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+总体上故障信息集中在\textbf{跳变沿}（沿区$\approx$全波形$\gg$平台区）。更有信息量的是逐类分布
+（图~\ref{fig:region}）：\texttt{impedance\_discontinuity} 沿区 0.94 / 平台区 \textbf{0.00}——反射型故障
+只在沿处现形，印证其属反射域、需 TDR（时域反射）或多探针才能覆盖；\texttt{healthy} 平台区 1.00——干净
+稳态电平最具判别力。\textbf{不同故障的判别信息分布在波形的不同部位}，这为“片上比较器最佳采样位置/多
+探针布置”提供了可计算的经验证据，也解释了为何固定的少量人工特征会受限（见下节）。
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.95\textwidth]{region_ablation.png}
+\caption{区域消融。左：总体准确率；右：逐类准确率。阻抗不连续仅在沿区可检，健康在平台区最可分。}\label{fig:region}
+\end{figure}
+
+% =====================================================================
+\section{技术分析：AI 为什么是必要的}\label{sec:why}
+
+课程要求重点讨论“AI 为什么有效、以及其局限性”。仅凭 CNN 比逻辑回归高 10 个百分点不足以论证“必须用
+学习模型”——一个测试工程师会反问：\emph{为什么不用一个眼裕度阈值，或几条人工特征规则？} 本节用三组
+针对性实验回答，给出 AI 必要性的可证伪边界。
+
+\paragraph{与上一节的区分，以及对“是否只是数据生成的结果”的回应。} §\ref{sec:tele} 的遥测消融回答的是
+\emph{融合问题}（多模态遥测何时有用），其结论依赖于我们注入的温度混杂。本节回答的是\emph{解法问题}
+（为什么必须用学习模型），并刻意让其中两组实验\textbf{不依赖任何注入的混杂}，以免“AI 必要性”的结论被
+质疑为数据生成的副产品：
+\begin{itemize}
+\item 实验二（人工特征 vs 学表征）与实验三（单标量能否给出根因）\textbf{完全不涉及温度/droop 混杂}——
+它们只问“把波形压成固定特征或单个标量会丢多少可分性”，这是\textbf{故障物理本身}的性质，与我们如何注入
+环境量无关。这两组是 AI 必要性的\textbf{主证据}。
+\item 实验一（单阈值规则 vs 学习边界）\textbf{确实}用到该混杂——它展示的是“混杂存在时一维阈值不够”，故
+其前提是 §\ref{sec:tele} 已论证的、物理上成立的混杂。我们如实标注这一依赖。
+\end{itemize}
+
+\subsection{实验一：单阈值规则在有损体制下存在不可逾越的误报-检出权衡}
+我们给单阈值规则\textbf{最大的便利}：直接在测试集上枚举所有候选阈值 $\tau$ 选最优（这是任何单阈值规则
+的性能上界，即“先知阈值”）。结果（表~\ref{tab:rule}）揭示一个结构性困难：
+
+\begin{table}[h]\centering\small
+\caption{有损体制：先知单阈值规则 对 学习的二维（裕度,温度）边界}\label{tab:rule}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+检测器 & 工作点 & 故障检出率 & 健康误报率 \\
+\midrule
+单阈值规则（先知 $\tau$） & 强制健康误报 = 0 & 0.587 & 0.000 \\
+单阈值规则（先知 $\tau$） & 最高准确率点 & 0.995 & \textbf{1.000} \\
+\textbf{学习边界（裕度+温度）} & 自然工作点 & \textbf{0.720} & \textbf{0.000} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+解读如下。单阈值规则\textbf{没有任何工作点能同时做到低误报与高检出}：要把健康误报压到 0，阈值必须放到
+$414$\,mV，此时故障检出率崩到 58.7\%；反之“最高准确率”那一点之所以好看，只是因为测试集里故障占多数，
+把几乎所有链路都判为故障（检出率 0.995、误报率 1.0）就能蒙到高准确率——这是一个无用的检测器。
+根本原因是\textbf{良性高应力健康链路与真实故障在裕度这一维上重叠}（图~\ref{fig:lossy} 灰带），一维阈值
+在数学上无法表达分隔它们所需的边界。
+
+而一个仅多用了\textbf{一维温度遥测}的学习边界，在\textbf{同样零误报}下把检出率从 58.7\% 提到 72.0\%——
+严格优于规则的零误报工作点。这说明此处 AI 的必要性\textbf{不是}“深度网络比线性强”，而是\textbf{问题本身
+需要一个多变量决策边界来扣除混杂}，任何固定的单变量规则都做不到。这是一个有判决条件、可证伪的结论。
+
+\subsection{实验二：从原始信号学表征优于固定的人工特征}
+表~\ref{tab:diag} 已给出：18 维标准眼图特征配逻辑回归/MLP 只能到 0.672/0.702，与读原始波形的逻辑回归持平，
+而原始波形上的 CNN 达 0.803。也就是说，\textbf{把波形压成一组固定的、为单一故障设计的眼图特征会丢信息}。
+区域消融解释了原因：不同故障的判别信息分布在波形的不同部位（阻抗不连续只在沿，健康只在平台，串阻在
+幅度），\textbf{一组固定的少量特征无法同时为所有故障保留正确的、依赖位置的统计量}；而卷积核在整条波形上
+滑动、由数据决定关注何处，因而多拿到约 10 个百分点。这正是“从原始信号学表征”相对“经典特征工程”的价值
+所在，也与课程“不卷模型、看是否真解决问题”的导向一致——价值来自表征学习覆盖了多类故障，而非堆叠层数。
+
+\subsection{实验三：常规方法只能二分类，学习模型才能给出根因}\label{sec:rootcause}
+一个常被陈述的命题是：\emph{常规方法只能判“连接是否有故障”（二分类），而机器学习能进一步分出故障的根因。}
+这一命题在本任务中\textbf{基本成立，但需限定}。我们把常规在役监测能拿到的信息——单一眼裕度标量——直接用于
+\textbf{10 类根因}判别，与学习模型对比（表~\ref{tab:rootcause}）。
+
+\begin{table}[h]\centering\small
+\caption{用不同信息做 10 类根因判别（测试集）。多数类基线为 0.182}\label{tab:rootcause}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+判别所用信息 & 10 类准确率 & macro-F1 \\
+\midrule
+单一眼裕度标量 & 0.222 & 0.209 \\
+眼裕度 + 温度/droop 遥测 & 0.258 & 0.255 \\
+\textbf{完整波形（CNN）} & \textbf{0.803} & \textbf{0.788} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+单一眼裕度标量做 10 类只有 \textbf{0.222}，几乎等同多数类基线 0.182——也就是说，它\textbf{携带的根因信息
+接近于零}：一个标量裕度可以告诉你“眼闭了多少”（粗略的健康/故障二分），但\textbf{无法分辨眼是被串阻、电容、
+串扰还是反射闭合的}，因为这些不同根因可以塌缩到相同的裕度值。加上温度/droop 遥测也只升到 0.258（遥测帮的是
+去混杂、不是辨根因）。而完整波形的形状（沿的快慢、平台的噪声、反射纹路）保留了区分根因所需的结构，CNN 据此
+达到 0.803。
+
+因此命题应精确表述为：\textbf{在“有损标量观测”这一常规在役设置下，可得信息只够支撑二分类（且如实验一所示，
+连这个二分类在混杂下都不可靠）；要把判别从“是否故障”推进到“何种根因”，必须使用保留波形结构的观测 + 学习
+模型。}需要说明的边界是，这并非说一切常规方法都只能二分类——制造测试中基于确定性图案与故障字典的诊断本可做
+一定的故障定位/分类；但那依赖结构化激励与响应，不适用于本文研究的、在混杂下从单一健康信号做在役参数化诊断
+的设置。
+
+\subsection{综合：AI 的必要性边界}
+合并三组实验，可以精确陈述 AI 在本任务中“何时必要、何时不必要”：
+\begin{itemize}
+\item \textbf{当观测有损（运行时标量）且存在混杂}：必须用能表达多变量边界的学习模型来扣除环境共模；
+单阈值规则在零误报下损失约 13 个百分点的检出率。
+\item \textbf{当要从“是否故障”推进到“何种根因”}：单标量裕度的 10 类准确率仅 0.222（约等于瞎猜），
+必须用保留波形结构的观测 + 学习模型（CNN 0.803）。这是“常规=二分类、学习=根因”命题的量化依据。
+\item \textbf{当需要覆盖多类、信息分布在波形不同位置的故障}：从原始信号学表征优于固定人工特征约 10 个
+百分点；且\textbf{结构要匹配信号}——CNN（0.803）优于 LSTM（0.596），并非越复杂越好。
+\item \textbf{当观测无损（完整波形）}：波形已隐含混杂变量，额外遥测近乎冗余；此时“多加遥测总更好”的直觉
+\textbf{不成立}。这条边界本身就是本文要传达的洞见。
+\end{itemize}
+
+% =====================================================================
+\section{局限性}
+
+\begin{enumerate}
+\item \textbf{匹配良好的短链路对参数/热扰动天生迟钝}：导体电阻远小于驱动+终端，故温度、分布式串阻、热点、
+阻抗阶跃在原始眼幅上长期不可见，必须显式引入 $R_\text{on}(T)$、绝对分布式串阻等机制才使其可检。这本身
+也是一条物理洞见：单一眼图度量对这类退化天生不敏感。
+\item \textbf{阻抗不连续在幅度域几乎不可见}（平台区准确率 0.00），属反射域故障，需 TDR/反射系数模态——
+进一步印证多模态/多探针的必要性。
+\item \textbf{原始波形并非运行时遥测}：本文据此区分两种观测体制并诚实标注；运行时的真实形态是有损标量
+或误码序列。
+\item \textbf{r\_drift 与温度混杂}：分布式串阻与温度同样抬升串阻，单波形难以完全分离其严重度
+（$R^2$ 0.867 $<$ c\_drift 0.998），需遥测辅助。
+\item \textbf{数据规模与单次划分}：786 样本、单次分层划分（区域消融已用 3 次重初始化稳健化）；类别不平衡
+用类权重缓解；全为仿真数据，缺乏现场标定。
+\item \textbf{CNN 相对线性基线优势有限}：在更易的数据版本上两者几乎持平，符合课程导向——本工作的贡献在
+\textbf{问题重构与洞见}，而非新模型。
+\end{enumerate}
+
+% =====================================================================
+\section{结论与复现}
+
+\subsection{结论}
+本项目交付了一个开放、可复现、物理接地的 D2D 互连原始波形故障诊断基准与方法：CNN 十分类诊断 80.3\%、
+连续漂移严重度回归 $R^2$ 0.867/0.998。核心贡献是把“多模态遥测是否有用”变成一个有判决条件的结论——
+\textbf{其价值取决于主观测的有损性}：在有损观测下，融合温度把良性高应力误报从 37.5\% 压到 0\%，且在零误报
+工作点把检出率从规则的 58.7\% 提到 72.0\%；同时区域消融定位了各类故障的判别信息所在（沿区为主，阻抗不
+连续仅见于沿区）。这是对“在役 D2D 链路健康多模态融合”空白的一个问题重构 + 可证伪演示式的贡献，而非一个
+新的 ML 模型。
+
+\subsection{未来工作}
+用有损误码序列（比较器位流）替代标量裕度，做时序模型（TCN/LSTM）对照；接入 TDR/反射系数模态覆盖阻抗
+不连续；多故障共现（multi-label）；扩大样本与多次交叉验证、加入更真实的失配/有损信道标定。
+
+\subsection{复现说明}
+\begin{lstlisting}[language=bash]
+cd sim
+# 1) 生成原始波形数据集（约 16 min）
+python3 -c "from d2dsim.wave_campaign import run_wave_campaign; \
+            run_wave_campaign(out_dir='out/wave')"
+# 2) 可视化（眼图/波形/遥测覆盖）
+~/miniconda3/envs/drl_hw2/bin/python inspect_waves.py --data out/wave
+# 3) 训练 + 全部消融 + 出图
+~/miniconda3/envs/drl_hw2/bin/python ml_diagnose.py --data out/wave
+# 4) “AI 为什么必要”的对照实验（规则基线 + 人工特征基线）
+~/miniconda3/envs/drl_hw2/bin/python why_ai.py --data out/wave
+# 5) LSTM 对照 + 单标量根因判别实验
+~/miniconda3/envs/drl_hw2/bin/python extra_models.py --data out/wave
+\end{lstlisting}
+仿真器为纯 \texttt{ngspice}+标准库（\texttt{d2dsim/}）；ML 在 \texttt{drl\_hw2} 环境（numpy/torch/matplotlib）。
+关键产物：\texttt{out/wave/waveforms.csv}、\texttt{results.json}、\texttt{why\_ai.json}、\texttt{plots/*.png}、
+\texttt{inspect/*.png}。
+
+\end{document}

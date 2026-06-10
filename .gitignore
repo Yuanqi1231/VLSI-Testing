@@ -1,0 +1,26 @@
+# Large / external corpora (omitted from the repo)
+papers/
+
+# ngspice scratch / transient work dirs (regenerated at runtime)
+_work/
+_work_wave/
+**/_work/
+**/_work_wave/
+
+# Python caches
+**/__pycache__/
+*.pyc
+
+# Large regenerable datasets (re-create via wave_campaign.py; see sim/README_waveform_ml.md)
+sim/out/wave/waveforms.csv
+sim/out/wave_quick/
+sim/out/dataset.csv
+sim/out/dataset_quick.csv
+
+# Logs and LaTeX build artifacts
+*.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
+texput.log

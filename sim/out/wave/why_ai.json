@@ -1,0 +1,22 @@
+{
+  "rule_lossy": {
+    "best_accuracy_threshold": {
+      "tau_mV": 550.7190227508545,
+      "acc": 0.9494949494949495,
+      "healthy_FA": 1.0,
+      "stressed_healthy_FA": 1.0,
+      "fault_recall": 0.9947089947089947
+    },
+    "first_zero_FA_threshold": {
+      "tau_mV": 414.4599735736847,
+      "acc": 0.6060606060606061,
+      "fault_recall": 0.5873015873015873,
+      "healthy_FA": 0.0
+    }
+  },
+  "handcrafted_10class": {
+    "n_features": 18,
+    "logistic_on_features_acc": 0.6717171717171717,
+    "mlp_on_features_acc": 0.702020202020202
+  }
+}

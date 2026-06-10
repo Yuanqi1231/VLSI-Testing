@@ -1,0 +1,9 @@
+# ngspice scratch decks + waveform dumps (regenerated on demand)
+_work/
+# python caches
+__pycache__/
+*.pyc
+# stray ngspice wrdata dumps (legit dumps live under _work/)
+/*.dat
+# generated dataset is reproducible; keep plots if you want them versioned
+out/*.csv

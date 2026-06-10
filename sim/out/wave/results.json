@@ -1,0 +1,105 @@
+{
+  "n": 786,
+  "classes": [
+    "bridge_short",
+    "bump_void_aging",
+    "c_drift",
+    "crosstalk_cap",
+    "healthy",
+    "hotspot",
+    "impedance_discontinuity",
+    "r_drift",
+    "resistive_open",
+    "supply_droop"
+  ],
+  "n_test": 198,
+  "region_samples": {
+    "valid": 960,
+    "signal": 511,
+    "held": 449
+  },
+  "baseline_logistic_acc": 0.702020202020202,
+  "cnn_waveform_acc": 0.803030303030303,
+  "telemetry_ablation": {
+    "A_overall": 0.803030303030303,
+    "B_overall": 0.8636363636363636,
+    "A_highstress": 0.7967032967032966,
+    "B_highstress": 0.8516483516483516,
+    "A_healthy_false_alarm": 0.3333333333333333,
+    "B_healthy_false_alarm": 0.3333333333333333
+  },
+  "lossy_ablation": {
+    "A_margin_only": {
+      "acc": 0.7070707070707071,
+      "healthy_FA": 0.3333333333333333,
+      "stressed_healthy_FA": 0.375,
+      "fault_recall": 0.708994708994709
+    },
+    "B_margin_plus_telemetry": {
+      "acc": 0.7323232323232324,
+      "healthy_FA": 0.0,
+      "stressed_healthy_FA": 0.0,
+      "fault_recall": 0.7195767195767195
+    }
+  },
+  "region_ablation_std": {
+    "full": 0.019487940913788283,
+    "signal": 0.02344846511310459,
+    "held": 0.040683656476749375
+  },
+  "region_ablation_acc": {
+    "full": 0.8063973063973066,
+    "signal": 0.7845117845117845,
+    "held": 0.6599326599326599
+  },
+  "region_ablation_per_class": {
+    "full": [
+      1.0,
+      0.4166666666666667,
+      1.0,
+      1.0,
+      0.5555555555555556,
+      0.7777777777777778,
+      1.0,
+      0.59375,
+      0.6666666666666666,
+      0.7777777777777778
+    ],
+    "signal": [
+      0.8333333333333334,
+      0.5833333333333334,
+      0.96875,
+      1.0,
+      0.6666666666666666,
+      0.5555555555555556,
+      0.9444444444444444,
+      0.78125,
+      0.6111111111111112,
+      0.8333333333333334
+    ],
+    "held": [
+      0.8333333333333334,
+      0.16666666666666666,
+      0.96875,
+      1.0,
+      1.0,
+      0.4444444444444444,
+      0.0,
+      0.375,
+      0.6666666666666666,
+      0.7222222222222222
+    ]
+  },
+  "severity": {
+    "r_drift": {
+      "mae_norm": 0.10737058520317078,
+      "r2": 0.8669348596782585,
+      "n_test": 32
+    },
+    "c_drift": {
+      "mae_norm": 0.012089451774954796,
+      "r2": 0.9979776129920045,
+      "n_test": 32
+    }
+  }
+}

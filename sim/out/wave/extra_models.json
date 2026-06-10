@@ -1,0 +1,18 @@
+{
+  "lstm_waveform_acc": 0.5959595959595959,
+  "lstm_waveform_macro_f1": 0.5753608282144624,
+  "lstm_plus_telemetry_acc": 0.6515151515151515,
+  "cnn_waveform_acc": 0.797979797979798,
+  "cnn_waveform_macro_f1": 0.7877467557536583,
+  "rootcause_from_scalar": {
+    "majority_class_acc": 0.18181818181818182,
+    "margin_scalar": {
+      "acc": 0.2222222222222222,
+      "macro_f1": 0.20860026715119967
+    },
+    "margin_plus_telemetry": {
+      "acc": 0.25757575757575757,
+      "macro_f1": 0.2551655853458289
+    }
+  }
+}
