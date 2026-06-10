@@ -180,8 +180,13 @@ def plot_waveforms(meta, by_class, path):
 
 
 def plot_overview(by_class, rows, path):
-    classes = sorted(by_class)
-    counts = [len(by_class[c]) for c in classes]
+    # group the many "a+b" concurrent-fault labels into one bar so the
+    # y-axis stays readable (v2 has 36 distinct two-fault combinations)
+    grouped = defaultdict(int)
+    for c, recs in by_class.items():
+        grouped["concurrent (a+b)" if "+" in c else c] += len(recs)
+    classes = sorted(grouped)
+    counts = [grouped[c] for c in classes]
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(14, 5))
     a1.barh(classes, counts, color="#1f77b4")
     a1.set_xlabel("# runs"); a1.set_title("Class balance")
