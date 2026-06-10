@@ -147,8 +147,8 @@
 
 \begin{frame}{相关工作小结：五条路线留下四个空白}
     \centering
-    \footnotesize
-    \begin{tabular}{@{}p{2.1cm}p{4.6cm}p{3.6cm}@{}}
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}lll@{}}
         \toprule
         \textbf{路线} & \textbf{代表做法} & \textbf{未覆盖之处} \\
         \midrule
@@ -158,7 +158,7 @@
         热建模 & 电--热协同仿真 & 温度被当作待补偿外因 \\
         安全监测 & 延迟 PUF / 阻抗谱 & 不关注渐进退化 \\
         \bottomrule
-    \end{tabular}
+    \end{tabular}}
     \vspace{0.7em}
     \begin{block}{\small 四个空白（本文逐一用实验回应）}
         \small ① 环境量与故障征象的\hl{混杂}关系 \quad ② 运行时\hl{观测受限}\\
@@ -234,11 +234,78 @@
     \end{itemize}
 \end{frame}
 
-\begin{frame}{十类故障：每类是一个带严重度轴的电路参数偏移}
-    \begin{figure}
-        \centering
-        \includegraphics[height=0.8\textheight]{pic/eyes.png}
-    \end{figure}
+\begin{frame}{故障建模总览：十类故障 = 十个带连续严重度轴的参数偏移}
+    \centering
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{@{}lllll@{}}
+        \toprule
+        \textbf{类别} & \textbf{改变的参数} & \textbf{故障取值（连续）} & \textbf{注入位置} & \textbf{机理} \\
+        \midrule
+        healthy & 无注入 & —— & —— & —— \\
+        resistive\_open & 单段串阻 $+\,r_o$ & $r_o\sim\log U(20,500)\,\Omega$ & 段 $U\{2..17\}$ & 裂纹/弱开路 \\
+        bump\_void\_aging & 单段串阻 $+\,r_o$（缓增） & $r_o\sim\log U(5,80)\,\Omega$ & 端段 $\{1,2,17,18\}$ & 凸点空洞老化 \\
+        bridge\_short & 并联阻 $R_\text{brg}$ 到邻线 & $R_\text{brg}\sim\log U(50,3000)\,\Omega$ & 节点 $U\{2..17\}$ & 残留导体/迁移 \\
+        crosstalk\_cap & 全部耦合容 $\times f$ & $f\sim U(2,8)$ & 全部节点 & 邻线间距异常 \\
+        supply\_droop & 发送摆幅 $\times(1{-}d)$ & $d\sim U(0.05,0.20)$ & 驱动端 & PDN 异常压降 \\
+        hotspot & 5 段局部温 + 串阻 & $T_\text{hot}\sim U(115,160)^\circ$C & 中心段 $U\{3..16\}\,{\pm}2$ & 局部热点/自热 \\
+        impedance\_disc. & 3 段电感 $\times z$ & $z\sim U(0.4,0.75)\cup U(1.4,3.0)$ & 起始段 $U\{2..15\}$ & 几何/工艺台阶 \\
+        r\_drift & 全段串阻 $+\Delta R/N$ & $\Delta R\sim U(15,150)\,\Omega$ & 全段分布 & 电迁移/界面退化 \\
+        c\_drift & 全节点容 $\times(1{+}c)$ & $c\sim U(0.3,2.5)$ & 全部节点 & 介质退化/吸湿 \\
+        \bottomrule
+    \end{tabular}}
+    \vspace{0.4em}
+    \begin{block}{\small 什么是``漂移（drift）故障''}
+        \small 老化机理造成的\hl{缓变参数漂移}（r\_drift / c\_drift / bump\_void\_aging 的``缓增''）：
+        无离散失效事件、严重度连续、\hl{今天还不误码}——诊断目标是在 BER 恶化之前量化它
+    \end{block}
+    \vspace{2pt}
+    {\scriptsize 严重度均为连续采样（电阻类取 $\log U$，效应是乘性的）；温度 $T\sim U(27,110)^\circ$C 对所有类同分布}
+\end{frame}
+
+\begin{frame}{眼图征象 1/5：衰减类——串联电阻的四种来源}
+    \centering
+    \includegraphics[width=0.8\textwidth]{pic/eye_grp_attenuation.png}
+    \begin{itemize}\footnotesize
+        \item 根因同为\hl{串阻分压}（对 $R_\text{term}$）+ RC 损耗 $\Rightarrow$ 眼高塌陷（354 $\to$ 103--209 mV）
+        \item 区别在\hl{位置与分布}：单段集中（开路）/ 凸点端缓增（空洞老化）/ 5 段局部 + 热噪声（hotspot）/ 全线均摊（r\_drift，漂移故障）——这也是它们相互混淆的物理根源
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{眼图征象 2/5：摆幅类——supply\_droop}
+    \centering
+    \includegraphics[width=0.62\textwidth]{pic/eye_grp_droop.png}
+    \begin{itemize}\footnotesize
+        \item 根因在\hl{发送端}：launch 摆幅 $\times(1-d)$，信道本身完好 $\Rightarrow$ 眼形干净、整体变矮（354 $\to$ 292 mV），无额外抖动/噪声
+        \item 与\hl{良性负载 droop 完全同机制}，只是幅度更大且\hl{未被遥测上报}——模型必须发现``摆幅比 droop monitor 所解释的更小''，是遥测融合实验的关键类
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{眼图征象 3/5：边沿类——c\_drift（漂移故障）}
+    \centering
+    \includegraphics[width=0.62\textwidth]{pic/eye_grp_cdrift.png}
+    \begin{itemize}\footnotesize
+        \item 漂移故障之二：介质退化/吸湿使\hl{全部节点电容}缓慢上涨 $\times(1{+}c)$
+        \item RC 时间常数增大 $\Rightarrow$ \hl{边沿变缓 + ISI}：眼宽从 51 ps 坍到 22 ps、BER 升至 $10^{-7}$，而幅度损失相对次要——与衰减类的``矮眼''形成正交征象
+        \item 严重度连续 $\Rightarrow$ 可回归（$R^2=0.908$）：在误码爆发前给出退化程度
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{眼图征象 4/5：串扰/桥接类——来自邻线的能量}
+    \centering
+    \includegraphics[width=0.8\textwidth]{pic/eye_grp_xtalk.png}
+    \begin{itemize}\footnotesize
+        \item crosstalk\_cap：全部节点耦合容 $\times f$ $\Rightarrow$ 攻击线码型经 $C_c$ 注入，噪声\hl{与受害码型无关}——整个眼均匀模糊
+        \item bridge\_short：受害--邻线同号节点间的\hl{电阻泄漏通道}，双向分压 + 电平随邻线数据偏移——眼分层、出现多条轨迹
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{眼图征象 5/5：反射类——幅度上几乎隐形}
+    \centering
+    \includegraphics[width=0.8\textwidth]{pic/eye_grp_impedance.png}
+    \begin{itemize}\footnotesize
+        \item 3 段电感 $\times z$ $\Rightarrow$ 特征阻抗 $Z=\sqrt{L'/C'}$ 出现台阶，能量进入\hl{反射}而非衰减
+        \item 眼高几乎不变（354 vs 352/407 mV）$\Rightarrow$ 任何\hl{单标量裕度完全看不见它}；征象只藏在\hl{边沿附近的反射纹波}里——这正是后面区域消融中``平台区准确率 0.03''的伏笔
+    \end{itemize}
 \end{frame}
 
 \begin{frame}{数据集 v2：采样一个操作空间，而非枚举网格}
@@ -291,9 +358,10 @@
         \centering
         \includegraphics[width=0.95\textwidth]{pic/ladder.png}
     \end{figure}
-    \begin{itemize}\small
+    \begin{itemize}\footnotesize
         \item 随机码型使\hl{线性模型在原始波形上彻底失效}（0.221 $\approx$ 瞎猜）
         \item LSTM 同样崩溃（0.249）——起作用的是\hl{卷积的平移等变先验}，不是“深度”
+        \item CNN 没有多拿信息：\hl{同输入对照}（单通道波形、同划分）$0.752\pm0.011$ vs 0.249；TX 参考通道\hl{无一致增益}
     \end{itemize}
 \end{frame}
 
