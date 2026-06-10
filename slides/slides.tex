@@ -66,7 +66,86 @@
     \end{itemize}
 \end{frame}
 
-\begin{frame}{相关工作：五条路线及其留下的空白}
+\begin{frame}{相关工作 1/5：结构测试 BIST——制造期的通断筛查}
+    \begin{columns}
+        \column{0.52\textwidth}
+            \centering
+            \includegraphics[width=\textwidth]{pic/rel_bist.png}\\[2pt]
+            {\tiny 真/补码二进制计数序列：$N$ 根互连只需 $2\lceil\log_2 N\rceil{+}2$ 个\\向量即可检出并区分短路/开路（Huang et al., ITC 2024）}
+        \column{0.46\textwidth}
+            \footnotesize
+            \textbf{代表工作}
+            \begin{itemize}\footnotesize
+                \item IEEE 1838 晶粒包装寄存器 + 行/列条纹图案与修复（Chuang TCAD'25）
+                \item UCIe 测试/修复流程改进（Wang ETS'24）
+                \item 测试标准化呼吁（Cui ETS'23）
+            \end{itemize}
+            \begin{alertblock}{\footnotesize 局限}
+                \footnotesize 制造期\textbf{一次性} pass/fail；依赖确定图案与预定义故障模型——覆盖不了部署后的老化、漂移与间歇失效
+            \end{alertblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{相关工作 2/5：机器学习互连诊断——离线、全观测}
+    \centering
+    \includegraphics[width=0.9\textwidth]{pic/rel_kang.png}\\[2pt]
+    {\tiny 上：传统方法只跟踪单频点标量随时间的演化；下：对整段反射系数``信号模式''做集成学习，\\输出严重度与根因（Kang et al., arXiv 2023）}
+    \vspace{0.2em}
+    \begin{itemize}\footnotesize
+        \item 同路线：TSV 缺陷 ML 分类（Huang TCPMT'18）、眼图/密度自编码器异常检测（Medico EPEPS'18）、高速信号隐空间表征（Usama TCAD'26）
+    \end{itemize}
+    \begin{alertblock}{\footnotesize 局限}
+        \footnotesize 固定测试图案 + 受控测量环境；默认\textbf{完整波形/高维特征可得}——随机工作负载与运行时受限观测均未覆盖
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{相关工作 3/5：老化监测——芯片级健康趋势}
+    \centering
+    \includegraphics[width=0.66\textwidth]{pic/rel_octane.png}\\[2pt]
+    {\tiny OCTANE：复用既有片上遥测（存储/传感器/核），无监督融合为异常分数与诊断特征向量（Ortega et al., ITC 2025）}
+    \begin{itemize}\footnotesize
+        \item 环振/开关频率监视器大规模跟踪 FPGA 老化（Lanzieri arXiv'24）
+        \item 嵌入式仪表数据融合 + 剩余寿命预测（Ali IOLTS'20）
+    \end{itemize}
+    \begin{alertblock}{\footnotesize 局限}
+        \footnotesize 输出是\textbf{芯片级/模块级}健康指标——定位不到具体哪根互连、哪种失效机理
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{相关工作 4/5：热建模与电--热协同仿真}
+    \begin{columns}
+        \column{0.45\textwidth}
+            \centering
+            \includegraphics[width=0.98\textwidth]{pic/rel_3dice.png}\\[2pt]
+            {\tiny 3D-ICE 4.0：按热梯度自适应细化的非均匀网格，chiplet 系统温度场（Zhu et al., 2025）}
+        \column{0.53\textwidth}
+            \footnotesize
+            \textbf{代表工作}
+            \begin{itemize}\footnotesize
+                \item 3D-ICE 4.0：2.5D/3D chiplet 系统的高效精确热仿真（Zhu 2025）
+                \item 电--热协同模型：互连焦耳热 $\leftrightarrow$ 温度场迭代求解（Ma TVLSI'24）
+            \end{itemize}
+            \begin{alertblock}{\footnotesize 局限}
+                \footnotesize 面向设计期热优化；温度只被当作\textbf{待补偿的外因}——温度与故障征象在观测上如何纠缠，没人从诊断角度回答
+            \end{alertblock}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{相关工作 5/5：安全监测——互连电学特征的另一种用法}
+    \centering
+    \includegraphics[width=0.96\textwidth]{pic/rel_quake.png}\\[2pt]
+    {\tiny ChipletQuake：验证者 chiplet 以片上执行器/环振阵列做阻抗感知，检测互连层物理篡改（Monfared et al., 2025）}
+    \vspace{0.2em}
+    \begin{itemize}\footnotesize
+        \item 晶粒间延迟 PUF 实现零信任完整性校验（Deric \& Holcomb, TCHES'22）
+        \item 共同启示：互连电学特征（延迟/阻抗）\hl{信息量充足}且片上可测
+    \end{itemize}
+    \begin{alertblock}{\footnotesize 局限}
+        \footnotesize 目标是篡改/木马的\textbf{一次性检验}，不跟踪渐进退化——与在役健康监测互补
+    \end{alertblock}
+\end{frame}
+
+\begin{frame}{相关工作小结：五条路线留下四个空白}
     \centering
     \footnotesize
     \begin{tabular}{@{}p{2.1cm}p{4.6cm}p{3.6cm}@{}}
