@@ -30,3 +30,10 @@ sim/out/_v2cal/
 *.toc
 *.synctex.gz
 texput.log
+slides/*.aux
+slides/*.log
+slides/*.nav
+slides/*.out
+slides/*.snm
+slides/*.toc
+slides/*.vrb
