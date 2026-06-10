@@ -1,0 +1,171 @@
+{
+  "n": 6000,
+  "n_concurrent": 782,
+  "classes": [
+    "healthy",
+    "resistive_open",
+    "bridge_short",
+    "crosstalk_cap",
+    "bump_void_aging",
+    "supply_droop",
+    "hotspot",
+    "impedance_discontinuity",
+    "r_drift",
+    "c_drift"
+  ],
+  "epochs": 60,
+  "multilabel": {
+    "logistic_RX": {
+      "exact_match": 0.0020013342228152103,
+      "macro_f1": 0.27291659959451714,
+      "healthy_FA": 1.0,
+      "fault_detect_recall": 1.0,
+      "per_class_f1": [
+        0.258,
+        0.184,
+        0.21,
+        0.205,
+        0.757,
+        0.205,
+        0.165,
+        0.204,
+        0.268
+      ]
+    },
+    "cnn_RX": {
+      "exact_match": 0.5403602401601068,
+      "macro_f1": 0.6994648857612206,
+      "healthy_FA": 0.6181102362204725,
+      "fault_detect_recall": 0.9309236947791165,
+      "per_class_f1": [
+        0.522,
+        0.801,
+        0.994,
+        0.501,
+        0.862,
+        0.651,
+        0.374,
+        0.682,
+        0.907
+      ]
+    },
+    "cnn_RX_TX": {
+      "exact_match": 0.48432288192128087,
+      "macro_f1": 0.698217055200344,
+      "healthy_FA": 0.9330708661417323,
+      "fault_detect_recall": 0.9622489959839358,
+      "per_class_f1": [
+        0.547,
+        0.811,
+        0.976,
+        0.451,
+        0.873,
+        0.685,
+        0.356,
+        0.64,
+        0.945
+      ]
+    },
+    "cnn_RX_TX_tel": {
+      "exact_match": 0.5390260173448966,
+      "macro_f1": 0.7272478748800028,
+      "healthy_FA": 0.905511811023622,
+      "fault_detect_recall": 0.9526104417670683,
+      "per_class_f1": [
+        0.582,
+        0.778,
+        0.988,
+        0.546,
+        0.971,
+        0.693,
+        0.387,
+        0.676,
+        0.924
+      ]
+    }
+  },
+  "telemetry_ablation_v2": {
+    "A_waveform_only": {
+      "acc": 0.6899462778204144,
+      "healthy_FA": 0.610236220472441,
+      "stressed_healthy_FA": 0.5355191256830601,
+      "warped_healthy_FA": 0.6867469879518072
+    },
+    "B_plus_telemetry": {
+      "acc": 0.7689946277820414,
+      "healthy_FA": 0.3228346456692913,
+      "stressed_healthy_FA": 0.29508196721311475,
+      "warped_healthy_FA": 0.2891566265060241
+    },
+    "lossy_A_margin": {
+      "acc": 0.6837891927951968,
+      "healthy_FA": 0.11023622047244094,
+      "stressed_healthy_FA": 0.1497326203208556,
+      "fault_recall": 0.6417670682730924,
+      "warped_healthy_FA": 0.16279069767441862
+    },
+    "lossy_B_margin_tel": {
+      "acc": 0.6897931954636425,
+      "healthy_FA": 0.0,
+      "stressed_healthy_FA": 0.0,
+      "fault_recall": 0.6265060240963856,
+      "warped_healthy_FA": 0.0
+    },
+    "lossy_C_margin_tel_stress": {
+      "acc": 0.6711140760507005,
+      "healthy_FA": 0.0,
+      "stressed_healthy_FA": 0.0,
+      "fault_recall": 0.6040160642570281,
+      "warped_healthy_FA": 0.0
+    },
+    "B2_temp_droop_only": {
+      "acc": 0.8089025326170376,
+      "healthy_FA": 0.25196850393700787,
+      "warped_healthy_FA": 0.26506024096385544
+    },
+    "extra_seeds": {
+      "A_waveform_only": [
+        {
+          "seed": 1,
+          "acc": 0.7613200306983884,
+          "healthy_FA": 0.35826771653543305,
+          "warped_healthy_FA": 0.40963855421686746
+        },
+        {
+          "seed": 2,
+          "acc": 0.7114351496546432,
+          "healthy_FA": 0.6614173228346457,
+          "warped_healthy_FA": 0.6867469879518072
+        }
+      ],
+      "B_plus_telemetry": [
+        {
+          "seed": 1,
+          "acc": 0.7943207981580968,
+          "healthy_FA": 0.2204724409448819,
+          "warped_healthy_FA": 0.20481927710843373
+        },
+        {
+          "seed": 2,
+          "acc": 0.7912509593246354,
+          "healthy_FA": 0.3858267716535433,
+          "warped_healthy_FA": 0.3614457831325301
+        }
+      ],
+      "B2_temp_droop_only": [
+        {
+          "seed": 1,
+          "acc": 0.7889485801995395,
+          "healthy_FA": 0.3031496062992126,
+          "warped_healthy_FA": 0.42168674698795183
+        },
+        {
+          "seed": 2,
+          "acc": 0.7689946277820414,
+          "healthy_FA": 0.42913385826771655,
+          "warped_healthy_FA": 0.4939759036144578
+        }
+      ]
+    }
+  }
+}

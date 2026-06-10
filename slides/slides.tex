@@ -9,9 +9,9 @@
 \usepackage[RPvoltages]{circuitikz}
 \usetikzlibrary{positioning,arrows.meta,fit,backgrounds}
 
-\author{Yuanqi}
+\author{蒋皓辰\quad 侯景翔\quad 俞源圻\quad 高诚诚}
 \title{基于接收波形的 Chiplet 晶粒间互连故障诊断}
-\subtitle{多模态遥测的价值取决于观测的有损性}
+\subtitle{机器学习、多模态遥测与在线诊断}
 \institute{清华大学 \quad VLSI 测试课程 Mini Research Project}
 \date{2026 年 6 月 11 日}
 \usepackage{Tsinghua}
@@ -61,8 +61,8 @@
         {\scriptsize 微凸点缺陷的 SEM 截面（imec，Wang et al., ETS 2024）：硬开路/短路之外还有\hl{弱（参数化）缺陷}}
     \end{center}
     \begin{itemize}
-        \item 制造期结构测试（IEEE 1838 + 确定图案）是\hl{一次性}的 pass/fail
-        \item 弱缺陷、老化与漂移表现为\hl{裕度的缓慢侵蚀}——只有在役监测能看到
+        \item 制造测试是\hl{一次性}的 pass/fail
+        \item 老化造成参数变化表现为\hl{信号完整性的缓慢侵蚀}——只有在役监测能看到
     \end{itemize}
 \end{frame}
 
@@ -88,7 +88,7 @@
 
 \begin{frame}{相关工作 2/5：机器学习互连诊断——离线、全观测}
     \centering
-    \includegraphics[width=0.9\textwidth]{pic/rel_kang.png}\\[2pt]
+    \includegraphics[width=0.7\textwidth]{pic/rel_kang.png}\\[2pt]
     {\tiny 上：传统方法只跟踪单频点标量随时间的演化；下：对整段反射系数``信号模式''做集成学习，\\输出严重度与根因（Kang et al., arXiv 2023）}
     \vspace{0.2em}
     \begin{itemize}\footnotesize
@@ -182,7 +182,7 @@
         \node[box,fill=red!12,anchor=west] (lossy) at ($(wave.east)+(1.0,-1.05)$)
             {\textbf{有损标量}（运行时）\\单个眼裕度数字};
         \node[box,fill=yellow!20,anchor=north west] (tel) at ($(sim.south west)+(0,-1.45)$)
-            {片上遥测：温度、droop\\（DTS / droop monitor，已常态化）};
+            {片上遥测：温度、电压droop\\（DTS / droop monitor，已常态化）};
         \draw[arr] (sim) -- (wave);
         \draw[arr] (wave.east) -- (full.west);
         \draw[arr] (wave.east) -- (lossy.west);
@@ -190,7 +190,7 @@
     \end{tikzpicture}}
     \vspace{0.6em}
     \begin{itemize}
-        \item 任务：10 类故障诊断（含并发）、连续严重度回归、健康/故障报警
+        \item 任务：10 类故障诊断、严重度回归、健康/故障报警
         \item 难点：温度与供电 droop \hl{同样闭合眼图}——良性扰动与缺陷征象重叠
         \item \hl{核心问题}：加入温度/droop 遥测，到底什么时候有用？
     \end{itemize}

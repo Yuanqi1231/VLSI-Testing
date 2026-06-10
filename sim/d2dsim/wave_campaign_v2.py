@@ -34,6 +34,7 @@ import time
 from array import array
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
+from . import physics
 from .params import Config, DEFECT_KINDS
 from .campaign import make_defect
 from .measure import simulate_link
@@ -87,8 +88,14 @@ def sample_defect(rng, kind):
     return make_defect("healthy"), 0.0
 
 
-def make_scenario(idx, master_seed, n_bits):
-    """Deterministic per-row scenario: fault(s) + operating point + nuisances."""
+def make_scenario(idx, master_seed, n_bits, mech=False):
+    """Deterministic per-row scenario: fault(s) + operating point + nuisances.
+
+    mech=True (v3) adds the mechanical latent: package warpage w ~ U(0,150) um,
+    mapped to electricals in physics/netlist (corner-bump contact R, mean piezo
+    on R_on, Cu gauge factor) and REPORTED through the stress_MPa telemetry --
+    same benign-environment semantics as temp_C / vdroop_frac, never a label.
+    """
     rng = random.Random(master_seed * 1_000_003 + idx)
     c0 = Config()
     kind = rng.choices(
@@ -135,6 +142,8 @@ def make_scenario(idx, master_seed, n_bits):
         c_rx=c0.c_rx * rng.uniform(0.90, 1.10),
         r_term=c0.r_term * rng.uniform(0.95, 1.05),
     )
+    if mech:
+        cfg_over["warpage_um"] = round(rng.uniform(0.0, 150.0), 1)
     return dict(idx=idx, label=label, defects=defects, sevs=sevs, cfg_over=cfg_over)
 
 
@@ -172,7 +181,7 @@ def _worker(arg):
 # ----------------------------------------------------------------- main -------
 def run_v2(out_dir="out/wave2", n_rows=4000, n_bits=160, workers=None,
            master_seed=20260610, noise_gain=30.0, work_root="_work_wave2",
-           verbose=True):
+           verbose=True, mech=False):
     os.makedirs(os.path.join(out_dir, "raw"), exist_ok=True)
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
     base = Config(n_bits=n_bits)
@@ -186,9 +195,10 @@ def run_v2(out_dir="out/wave2", n_rows=4000, n_bits=160, workers=None,
     shutil.rmtree(os.path.join(work_root, "_cal"), ignore_errors=True)
     delay_samples = int(round(f0["delay_ps"] * 1e-12 / (base.ui / SPU)))
 
-    scns = [make_scenario(i, master_seed, n_bits) for i in range(n_rows)]
+    scns = [make_scenario(i, master_seed, n_bits, mech=mech) for i in range(n_rows)]
     csv_path = os.path.join(out_dir, "waveforms.csv")
-    header = (["run_id", "label", "sev", "temp_C", "vdroop_frac", "noise_seed",
+    tel_cols = ["temp_C", "vdroop_frac"] + (["stress_MPa"] if mech else [])
+    header = (["run_id", "label", "sev"] + tel_cols + ["noise_seed",
                "seed_v", "eye_height_V", "eye_width_ps", "ber_log10"]
               + [f"s{i}" for i in range(m)])
     t_start = time.time()
@@ -207,11 +217,18 @@ def run_v2(out_dir="out/wave2", n_rows=4000, n_bits=160, workers=None,
                 print(f"[worker error] {type(e).__name__}: {e}", flush=True)
                 continue
             o = scn["cfg_over"]
-            w.writerow([f"w{idx:05d}", scn["label"], f"{scn['sevs'][0]:g}",
-                        f"{o['temp_c']:g}", f"{o['vdroop_benign']:g}",
-                        o["noise_seed"], o["seed_v"],
-                        f"{eye['eye_height_V']:.5f}", f"{eye['eye_width_ps']:.2f}",
-                        f"{eye['ber_log10']:.1f}"] + [f"{x:.5f}" for x in wave])
+            tel_vals = [f"{o['temp_c']:g}", f"{o['vdroop_benign']:g}"]
+            if mech:
+                # idealised on-die stress sensor: the BENIGN-environment stress
+                # (CTE bridge from the global DTS temperature + package warpage);
+                # a hotspot's local stress is invisible, like its local temp_C
+                c_t = Config(temp_c=o["temp_c"], warpage_um=o.get("warpage_um", 0.0))
+                tel_vals.append(f"{physics.sigma_mpa(c_t):.2f}")
+            w.writerow([f"w{idx:05d}", scn["label"], f"{scn['sevs'][0]:g}"]
+                       + tel_vals
+                       + [o["noise_seed"], o["seed_v"],
+                          f"{eye['eye_height_V']:.5f}", f"{eye['eye_width_ps']:.2f}",
+                          f"{eye['ber_log10']:.1f}"] + [f"{x:.5f}" for x in wave])
             jf.write(json.dumps(dict(
                 run_id=f"w{idx:05d}", label=scn["label"], sevs=scn["sevs"],
                 defects=scn["defects"], cfg_over=o, raw=raw, eye=eye,
@@ -229,7 +246,8 @@ def run_v2(out_dir="out/wave2", n_rows=4000, n_bits=160, workers=None,
                 cf.flush(); jf.flush()
 
     meta = {
-        "version": 2, "samples_per_ui": SPU, "n_bits": n_bits, "n_samples": m,
+        "version": 3 if mech else 2,
+        "samples_per_ui": SPU, "n_bits": n_bits, "n_samples": m,
         "ui_ps": base.ui * 1e12, "tstep_ps": base.tstep * 1e12,
         "settle_bits": base.settle_bits, "delay_samples": delay_samples,
         "noise_gain": noise_gain, "n_rows": n_done, "n_fail": n_fail,
@@ -237,13 +255,17 @@ def run_v2(out_dir="out/wave2", n_rows=4000, n_bits=160, workers=None,
         "prbs_order": base.prbs_order,        # bits per row = prbs_bits(order, n_bits, seed_v)
         "multi_label": True, "mixed_frac": MIXED_FRAC,
         "healthy_weight": HEALTHY_WEIGHT,
-        "telemetry": ["temp_C", "vdroop_frac"],
+        "telemetry": tel_cols,
         "classes": CLASSES,
         "raw_format": "little-endian float32, v(rxo) on the linearized tstep grid; "
                       "per-run t0/dt/n in scenarios.jsonl",
         "notes": "continuous T/severity for all classes; random PRBS per run; "
                  "per-run channel variation + TX jitter (nuisances); "
-                 "15% of fault rows have two concurrent faults (label 'a+b')",
+                 "15% of fault rows have two concurrent faults (label 'a+b')"
+                 + ("; mech latent: warpage ~ U(0,150) um -> corner-bump contact R"
+                    " + mean piezo on R_on + Cu gauge; stress_MPa telemetry = CTE"
+                    "(global T) + warpage stress (benign common-mode, not a label)"
+                    if mech else ""),
     }
     with open(os.path.join(out_dir, "meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
@@ -262,13 +284,15 @@ def build_cli():
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--seed", type=int, default=20260610)
     ap.add_argument("--noise-gain", type=float, default=30.0)
+    ap.add_argument("--mech", action="store_true",
+                    help="v3: sample package warpage; emit stress_MPa telemetry")
     return ap
 
 
 def main(argv=None):
     a = build_cli().parse_args(argv)
     run_v2(out_dir=a.out, n_rows=a.n_rows, n_bits=a.n_bits, workers=a.workers,
-           master_seed=a.seed, noise_gain=a.noise_gain)
+           master_seed=a.seed, noise_gain=a.noise_gain, mech=a.mech)
 
 
 if __name__ == "__main__":

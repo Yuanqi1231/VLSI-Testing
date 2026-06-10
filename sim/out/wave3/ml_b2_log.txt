@@ -1,0 +1,1 @@
+B2_temp_droop_only: {'acc': 0.8089025326170376, 'healthy_FA': 0.25196850393700787, 'warped_healthy_FA': 0.26506024096385544}

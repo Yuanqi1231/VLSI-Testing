@@ -1,0 +1,7 @@
+A_waveform_only {'seed': 1, 'acc': 0.7613200306983884, 'healthy_FA': 0.35826771653543305, 'warped_healthy_FA': 0.40963855421686746}
+A_waveform_only {'seed': 2, 'acc': 0.7114351496546432, 'healthy_FA': 0.6614173228346457, 'warped_healthy_FA': 0.6867469879518072}
+B_plus_telemetry {'seed': 1, 'acc': 0.7943207981580968, 'healthy_FA': 0.2204724409448819, 'warped_healthy_FA': 0.20481927710843373}
+B_plus_telemetry {'seed': 2, 'acc': 0.7912509593246354, 'healthy_FA': 0.3858267716535433, 'warped_healthy_FA': 0.3614457831325301}
+B2_temp_droop_only {'seed': 1, 'acc': 0.7889485801995395, 'healthy_FA': 0.3031496062992126, 'warped_healthy_FA': 0.42168674698795183}
+B2_temp_droop_only {'seed': 2, 'acc': 0.7689946277820414, 'healthy_FA': 0.42913385826771655, 'warped_healthy_FA': 0.4939759036144578}
+saved

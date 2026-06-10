@@ -121,6 +121,9 @@ class Config:
     cte_mismatch: float = 14.5e-6  # delta-alpha Cu-Si [/C]
     e_eff_gpa: float = 120.0       # effective Young's modulus [GPa]
     poisson: float = 0.30
+    # ---- warpage -> stress / bump contact (M5, simplified scalar form) ----
+    k_warp_mpa_um: float = 1.5     # corner stress per package bow [MPa/um]
+    k_warp_bump_ohm_um: float = 0.02  # elastic corner-bump contact R per bow [ohm/um]
     # operating stress reference [C]: incremental thermomechanical stress relative
     # to this temperature (so healthy@T0 is stress-neutral; the constant assembly/
     # reflow residual ~ -340 MPa is a separable DC offset, not detection-relevant).

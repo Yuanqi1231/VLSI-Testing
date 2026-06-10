@@ -57,16 +57,48 @@ def r_on_temp(cfg):
     return cfg.r_on * ((cfg.temp_c + TKELVIN) / (T0_C + TKELVIN)) ** cfg.mu_exp
 
 
+def r_on_passive(cfg):
+    """Driver on-resistance for the PASSIVE front-end: temperature mobility
+    degradation x the MEAN piezoresistive drive shift [ohm].
+
+    The single-R driver cannot carry the opposite-sign n/p split (that fingerprint
+    needs the active push-pull / the TX edge probe); what survives averaging the
+    two devices is mean(dmu/mu) = (pi_p - pi_n)/2 * sigma * sat_derate, i.e.
+    tensile stress slightly RAISES net drive (lowers R_on).  ~ -3% at 400 MPa.
+    """
+    dmu = 0.5 * (cfg.pi_si_p - cfg.pi_si_n) * cfg.sat_derate * sigma_mpa(cfg)
+    return r_on_temp(cfg) / (1.0 + dmu)
+
+
+def metal_stress_scale(cfg):
+    """Multiplicative ohmic scale on Cu trace/bump R from stress (Cu gauge
+    factor, M1): 1 + pi_metal * sigma.  Second-order (~ +0.7% at 400 MPa)."""
+    return 1.0 + cfg.pi_metal * sigma_mpa(cfg)
+
+
+def r_bump_warp_ohm(cfg):
+    """Additive elastic corner-bump contact resistance from package bow [ohm].
+
+    Warpage loads the corner micro-bumps (kappa = 8w/L^2); partially-contacting
+    joints under that load show an elastic, REVERSIBLE contact-R increase --
+    unlike bump_void_aging's permanent crack growth.  Linear scalar form:
+    dR = k * w  (~ 0-3 ohm over w = 0-150 um, below the 5-80 ohm fault range).
+    """
+    return cfg.k_warp_bump_ohm_um * cfg.warpage_um
+
+
 # -----------------------------------------------------------------------------
 # mechanical / thermomechanical stress  (M0/M1/M3 in the design note)
 # -----------------------------------------------------------------------------
 def sigma_mpa(cfg):
-    """Mechanical stress [MPa] = CTE-mismatch thermomechanical (from temp) + extra.
+    """Mechanical stress [MPa] = CTE-mismatch thermomechanical (from temp)
+    + package-warpage corner stress + extra.
 
-    sigma_cte = E/(1-nu) * dAlpha * (T - T_sf)   [Pa] -> /1e6 -> MPa   (M0, no FEM)
-    plus cfg.stress_mpa (e.g. warpage at constant temperature).
+    sigma_cte  = E/(1-nu) * dAlpha * (T - T_sf)  [Pa] -> /1e6 -> MPa   (M0, no FEM)
+    sigma_warp = k_w * w   (M5 scalar form: kappa = 8w/L^2 -> corner stress ~ w)
+    plus cfg.stress_mpa (an explicit override / extra term).
     """
-    s = cfg.stress_mpa
+    s = cfg.stress_mpa + cfg.k_warp_mpa_um * cfg.warpage_um
     if cfg.stress_from_thermal:
         E = cfg.e_eff_gpa * 1e9
         s += (E / (1.0 - cfg.poisson)) * cfg.cte_mismatch * (cfg.temp_c - cfg.t_stressfree) / 1e6

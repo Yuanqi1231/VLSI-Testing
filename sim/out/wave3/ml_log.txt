@@ -1,0 +1,16 @@
+loaded 6000 rows  (5218 single-fault, 782 concurrent)  classes=10
+
+[1] multi-label diagnosis (9 fault bits, healthy = all-zero, calibrated thresholds):
+   logistic_RX    : exact=0.002  macroF1=0.273  healthyFA=1.000  detect=1.000
+   cnn_RX         : exact=0.540  macroF1=0.699  healthyFA=0.618  detect=0.931
+   cnn_RX_TX      : exact=0.484  macroF1=0.698  healthyFA=0.933  detect=0.962
+   cnn_RX_TX_tel  : exact=0.539  macroF1=0.727  healthyFA=0.906  detect=0.953
+
+[3] telemetry ablation, leak-free dataset (single-fault, 10-class):
+   A_waveform_only   : acc=0.690  healthyFA=0.610  stressed-healthyFA=0.536  warped-healthyFA=0.6867469879518072
+   B_plus_telemetry  : acc=0.769  healthyFA=0.323  stressed-healthyFA=0.295  warped-healthyFA=0.2891566265060241
+   lossy_A_margin           : acc=0.684  healthyFA=0.110  stressed-healthyFA=0.1497326203208556  warped-healthyFA=0.16279069767441862  recall=0.642
+   lossy_B_margin_tel       : acc=0.690  healthyFA=0.000  stressed-healthyFA=0.0  warped-healthyFA=0.0  recall=0.627
+   lossy_C_margin_tel_stress: acc=0.671  healthyFA=0.000  stressed-healthyFA=0.0  warped-healthyFA=0.0  recall=0.604
+
+results -> out/wave3/results_v2.json

@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "samples_per_ui": 8,
+  "n_bits": 160,
+  "n_samples": 1280,
+  "ui_ps": 62.50000000000001,
+  "tstep_ps": 1.0,
+  "settle_bits": 8,
+  "delay_samples": 3,
+  "noise_gain": 30.0,
+  "n_rows": 6000,
+  "n_fail": 0,
+  "master_seed": 20260611,
+  "workers": 6,
+  "prbs_order": 7,
+  "multi_label": true,
+  "mixed_frac": 0.15,
+  "healthy_weight": 2.0,
+  "telemetry": [
+    "temp_C",
+    "vdroop_frac",
+    "stress_MPa"
+  ],
+  "classes": [
+    "healthy",
+    "resistive_open",
+    "bridge_short",
+    "crosstalk_cap",
+    "bump_void_aging",
+    "supply_droop",
+    "hotspot",
+    "impedance_discontinuity",
+    "r_drift",
+    "c_drift"
+  ],
+  "raw_format": "little-endian float32, v(rxo) on the linearized tstep grid; per-run t0/dt/n in scenarios.jsonl",
+  "notes": "continuous T/severity for all classes; random PRBS per run; per-run channel variation + TX jitter (nuisances); 15% of fault rows have two concurrent faults (label 'a+b'); mech latent: warpage ~ U(0,150) um -> corner-bump contact R + mean piezo on R_on + Cu gauge; stress_MPa telemetry = CTE(global T) + warpage stress (benign common-mode, not a label)"
+}

@@ -177,5 +177,301 @@
       "r2": 0.9082001085649055,
       "n_test": 118
     }
+  },
+  "temp_holdout": {
+    "extrap_hot_A_waveform_only": {
+      "acc": 0.6911764705882353,
+      "healthy_FA": 0.7342192691029901,
+      "stressed_healthy_FA": 0.7342192691029901,
+      "n_train": 3726,
+      "n_test": 1564,
+      "split": "train T<85C, test T>=85C"
+    },
+    "extrap_hot_B_plus_telemetry": {
+      "acc": 0.7698209718670077,
+      "healthy_FA": 0.39867109634551495,
+      "stressed_healthy_FA": 0.39867109634551495,
+      "n_train": 3726,
+      "n_test": 1564,
+      "split": "train T<85C, test T>=85C"
+    },
+    "interp_band_A_waveform_only": {
+      "acc": 0.8055735580038885,
+      "healthy_FA": 0.21597633136094674,
+      "stressed_healthy_FA": 0.178743961352657,
+      "n_train": 3747,
+      "n_test": 1543,
+      "split": "train T<60C or T>=85C, test 60<=T<85C"
+    },
+    "interp_band_B_plus_telemetry": {
+      "acc": 0.8152948801036941,
+      "healthy_FA": 0.16272189349112426,
+      "stressed_healthy_FA": 0.16908212560386474,
+      "n_train": 3747,
+      "n_test": 1543,
+      "split": "train T<60C or T>=85C, test 60<=T<85C"
+    }
+  },
+  "telemetry_noise": {
+    "levels": {
+      "clean": {
+        "sigma_T": 0.0,
+        "sigma_vdr": 0.0,
+        "droop_undersampling": null
+      },
+      "dts1C_v0.5pct": {
+        "sigma_T": 1.0,
+        "sigma_vdr": 0.005,
+        "droop_undersampling": null
+      },
+      "dts2C_v1pct": {
+        "sigma_T": 2.0,
+        "sigma_vdr": 0.01,
+        "droop_undersampling": null
+      },
+      "dts5C_v2pct": {
+        "sigma_T": 5.0,
+        "sigma_vdr": 0.02,
+        "droop_undersampling": null
+      },
+      "undersampled_droop": {
+        "sigma_T": 2.0,
+        "sigma_vdr": 0.01,
+        "droop_undersampling": [
+          0.6,
+          1.0
+        ]
+      }
+    },
+    "lossy_margin_tel": {
+      "clean": {
+        "acc": [
+          0.7119697979125027,
+          0.03978909838784704
+        ],
+        "healthy_FA": [
+          0.03884711779448621,
+          0.040061071085578395
+        ],
+        "stressed_healthy_FA": [
+          0.03626943005181347,
+          0.040797968259128556
+        ],
+        "fault_recall": [
+          0.6582995951417004,
+          0.055656850800282286
+        ]
+      },
+      "dts1C_v0.5pct": {
+        "acc": [
+          0.7086386853208971,
+          0.03742855790545582
+        ],
+        "healthy_FA": [
+          0.03508771929824561,
+          0.0349082412962008
+        ],
+        "stressed_healthy_FA": [
+          0.037996545768566495,
+          0.039985619698757253
+        ],
+        "fault_recall": [
+          0.6534412955465587,
+          0.05198607585190134
+        ]
+      },
+      "dts2C_v1pct": {
+        "acc": [
+          0.7035309793471018,
+          0.03206646475281736
+        ],
+        "healthy_FA": [
+          0.05513784461152882,
+          0.04451709190058048
+        ],
+        "stressed_healthy_FA": [
+          0.07081174438687392,
+          0.05712551091033239
+        ],
+        "fault_recall": [
+          0.6515519568151147,
+          0.048404229509229645
+        ]
+      },
+      "dts5C_v2pct": {
+        "acc": [
+          0.7033089051743282,
+          0.02948154879018624
+        ],
+        "healthy_FA": [
+          0.08145363408521303,
+          0.06308126791304872
+        ],
+        "stressed_healthy_FA": [
+          0.10880829015544041,
+          0.08680367442576209
+        ],
+        "fault_recall": [
+          0.6569500674763832,
+          0.04929896784432797
+        ]
+      },
+      "undersampled_droop": {
+        "acc": [
+          0.709526982011992,
+          0.038321792574336405
+        ],
+        "healthy_FA": [
+          0.09523809523809523,
+          0.079886603761951
+        ],
+        "stressed_healthy_FA": [
+          0.11398963730569948,
+          0.09757821686926103
+        ],
+        "fault_recall": [
+          0.6674763832658569,
+          0.06329040161706213
+        ]
+      }
+    },
+    "lossy_train_clean_test_noisy": {
+      "acc": 0.7401732178547635,
+      "healthy_FA": 0.15037593984962405,
+      "stressed_healthy_FA": 0.15544041450777202,
+      "fault_recall": 0.7165991902834008
+    },
+    "cnn_B_noisy_tel_2C_1pct": {
+      "acc": 0.7951625094482238,
+      "healthy_FA": 0.40225563909774437,
+      "stressed_healthy_FA": 0.32432432432432434
+    }
+  },
+  "per_class": {
+    "per_class": {
+      "healthy": {
+        "precision": 0.762,
+        "recall": 0.759,
+        "f1": 0.761,
+        "support": 266
+      },
+      "resistive_open": {
+        "precision": 0.626,
+        "recall": 0.642,
+        "f1": 0.634,
+        "support": 120
+      },
+      "bridge_short": {
+        "precision": 0.665,
+        "recall": 0.968,
+        "f1": 0.788,
+        "support": 125
+      },
+      "crosstalk_cap": {
+        "precision": 0.957,
+        "recall": 1.0,
+        "f1": 0.978,
+        "support": 112
+      },
+      "bump_void_aging": {
+        "precision": 0.752,
+        "recall": 0.877,
+        "f1": 0.81,
+        "support": 114
+      },
+      "supply_droop": {
+        "precision": 1.0,
+        "recall": 0.983,
+        "f1": 0.992,
+        "support": 121
+      },
+      "hotspot": {
+        "precision": 0.798,
+        "recall": 0.716,
+        "f1": 0.755,
+        "support": 116
+      },
+      "impedance_discontinuity": {
+        "precision": 0.685,
+        "recall": 0.42,
+        "f1": 0.521,
+        "support": 119
+      },
+      "r_drift": {
+        "precision": 0.905,
+        "recall": 0.768,
+        "f1": 0.831,
+        "support": 112
+      },
+      "c_drift": {
+        "precision": 1.0,
+        "recall": 0.949,
+        "f1": 0.974,
+        "support": 118
+      }
+    },
+    "top_confusions": [
+      {
+        "true": "impedance_discontinuity",
+        "pred": "healthy",
+        "n": 57
+      },
+      {
+        "true": "healthy",
+        "pred": "bridge_short",
+        "n": 42
+      },
+      {
+        "true": "hotspot",
+        "pred": "resistive_open",
+        "n": 30
+      },
+      {
+        "true": "resistive_open",
+        "pred": "bump_void_aging",
+        "n": 19
+      },
+      {
+        "true": "healthy",
+        "pred": "impedance_discontinuity",
+        "n": 18
+      },
+      {
+        "true": "resistive_open",
+        "pred": "hotspot",
+        "n": 16
+      },
+      {
+        "true": "r_drift",
+        "pred": "resistive_open",
+        "n": 13
+      },
+      {
+        "true": "impedance_discontinuity",
+        "pred": "bridge_short",
+        "n": 11
+      },
+      {
+        "true": "resistive_open",
+        "pred": "r_drift",
+        "n": 8
+      },
+      {
+        "true": "r_drift",
+        "pred": "bump_void_aging",
+        "n": 8
+      }
+    ],
+    "family_names": [
+      "attenuation",
+      "coupling",
+      "edge",
+      "healthy",
+      "reflection",
+      "swing"
+    ],
+    "family_acc": 0.8828420256991686,
+    "acc": 0.8027210884353742,
+    "in_family_error_frac": 0.4061302681992337
   }
 }

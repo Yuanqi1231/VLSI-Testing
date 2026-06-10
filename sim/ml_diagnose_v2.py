@@ -48,6 +48,7 @@ def load_v2(data_dir):
         header = next(r)
         col = {c: i for i, c in enumerate(header)}
         s0 = col["s0"]
+        has_stress = "stress_MPa" in col             # v3 mechanical telemetry
         recs, rows = [], []
         for line in r:
             if len(line) != len(header):
@@ -55,6 +56,7 @@ def load_v2(data_dir):
             recs.append(dict(label=line[col["label"]], sev=float(line[col["sev"]]),
                              temp=float(line[col["temp_C"]]),
                              vdr=float(line[col["vdroop_frac"]]),
+                             stress=float(line[col["stress_MPa"]]) if has_stress else 0.0,
                              seed_v=int(line[col["seed_v"]]),
                              margin=float(line[col["eye_height_V"]])))
             rows.append([float(x) for x in line[s0:]])
@@ -76,10 +78,13 @@ def load_v2(data_dir):
             prim[i] = classes.index(kinds[0])
     temp = np.asarray([r["temp"] for r in recs], np.float32)
     vdr = np.asarray([r["vdr"] for r in recs], np.float32)
-    tel = np.stack([temp / 100.0, vdr * 10.0], axis=1)
+    stress = (np.asarray([r["stress"] for r in recs], np.float32)
+              if has_stress else None)
+    tel = np.stack([temp / 100.0, vdr * 10.0]
+                   + ([stress / 300.0] if has_stress else []), axis=1)
     sev = np.asarray([r["sev"] for r in recs], np.float32)
     seeds = np.asarray([r["seed_v"] for r in recs], np.int64)
-    return X, Y, prim, single, classes, faults, sev, tel, temp, vdr, seeds, meta
+    return X, Y, prim, single, classes, faults, sev, tel, temp, vdr, stress, seeds, meta
 
 
 def tx_reference(seeds, meta):
@@ -254,7 +259,7 @@ def normalize(X, tr):
 
 # ------------------------------------------------------------- experiments ----
 def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
-    X, Y, prim, single, classes, faults, sev, tel, temp, vdr, seeds, meta = load_v2(data_dir)
+    X, Y, prim, single, classes, faults, sev, tel, temp, vdr, stress, seeds, meta = load_v2(data_dir)
     spu, settle, m = meta["samples_per_ui"], meta["settle_bits"], meta["n_samples"]
     valid = np.arange(settle * spu, m)
     h = classes.index("healthy")
@@ -301,7 +306,8 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
         runs = [("logistic_RX", LogisticML(len(valid), len(faults)), rx, None),
                 ("cnn_RX", CNN1Dv2(len(faults), in_ch=1), rx, None),
                 ("cnn_RX_TX", CNN1Dv2(len(faults), in_ch=2), rxtx, None),
-                ("cnn_RX_TX_tel", CNN1Dv2(len(faults), in_ch=2, n_tel=2), rxtx, telf)]
+                ("cnn_RX_TX_tel", CNN1Dv2(len(faults), in_ch=2, n_tel=telf.shape[1]),
+                 rxtx, telf)]
         for name, model, Xin, T in runs:
             out1[name] = fit_calibrated(model, Xin, T, tr, te)
             print(f"   {name:15s}: exact={out1[name]['exact_match']:.3f}  "
@@ -309,6 +315,7 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
                   f"healthyFA={out1[name]['healthy_FA']:.3f}  "
                   f"detect={out1[name]['fault_detect_recall']:.3f}")
         results["multilabel"] = out1
+        json.dump(results, open(res_path, "w"), indent=2)
 
     # ---- 2. pattern generalization: held-out PRBS seeds ----
     if "2" in exps:
@@ -323,6 +330,7 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
                   f"macroF1={out2[name]['macro_f1']:.3f}  "
                   f"healthyFA={out2[name]['healthy_FA']:.3f}")
         results["pattern_generalization"] = out2
+        json.dump(results, open(res_path, "w"), indent=2)
 
     # ---- 3. leak-free telemetry ablation (single-fault rows, 10-class) ----
     if "3" in exps:
@@ -332,22 +340,29 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
         cw = (len(tr3) / (len(classes) * np.maximum(
             np.bincount(y3[tr3], minlength=len(classes)), 1))).astype(np.float32)
         out3 = {}
-        for name, ntel, T in [("A_waveform_only", 0, None), ("B_plus_telemetry", 2, telf)]:
+        for name, ntel, T in [("A_waveform_only", 0, None),
+                              ("B_plus_telemetry", telf.shape[1], telf)]:
             lo = fit(CNN1Dv2(len(classes), in_ch=2, n_tel=ntel), rxtx[tr3], y3[tr3],
                      rxtx[te3], Ttr=T[tr3] if T is not None else None,
                      Tte=T[te3] if T is not None else None,
                      task="cls", epochs=epochs, cw=cw)
             p = lo.argmax(1)
             hmask = y3[te3] == h
-            stress = (temp[te3] >= 85.0) | (vdr[te3] >= 0.05)
+            stressed = (temp[te3] >= 85.0) | (vdr[te3] >= 0.05)
             out3[name] = {
                 "acc": float((p == y3[te3]).mean()),
                 "healthy_FA": float((p[hmask] != h).mean()) if hmask.any() else None,
-                "stressed_healthy_FA": float((p[hmask & stress] != h).mean())
-                                       if (hmask & stress).any() else None}
+                "stressed_healthy_FA": float((p[hmask & stressed] != h).mean())
+                                       if (hmask & stressed).any() else None}
+            if stress is not None:
+                wm = hmask & ((stress[te3] - 2.486 * (temp[te3] - 27.0)) >= 150.0)
+                out3[name]["warped_healthy_FA"] = (float((p[wm] != h).mean())
+                                                   if wm.any() else None)
             print(f"   {name:18s}: acc={out3[name]['acc']:.3f}  "
                   f"healthyFA={out3[name]['healthy_FA']:.3f}  "
-                  f"stressed-healthyFA={out3[name]['stressed_healthy_FA']:.3f}")
+                  f"stressed-healthyFA={out3[name]['stressed_healthy_FA']:.3f}"
+                  + (f"  warped-healthyFA={out3[name].get('warped_healthy_FA')}"
+                     if stress is not None else ""))
             if name == "B_plus_telemetry":
                 _confusion(y3[te3], p, classes,
                            os.path.join(plots, "confusion_v2.png"))
@@ -357,9 +372,17 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
         yb = (Y.sum(1) > 0).astype(np.int64)
         FA = mar[:, None]
         FB = np.stack([mar, temp / 100.0, vdr * 10.0], axis=1)
+        lossy_runs = [("lossy_A_margin", FA), ("lossy_B_margin_tel", FB)]
+        sigw = None
+        if stress is not None:
+            # warpage stress component = sensor stress minus the CTE-bridge part
+            # (E/(1-nu)*dAlpha = 2.486 MPa/C); >=150 MPa ~ bow w >= 100 um
+            sigw = stress - 2.486 * (temp - 27.0)
+            FC = np.concatenate([FB, stress[:, None] / 300.0], axis=1)
+            lossy_runs.append(("lossy_C_margin_tel_stress", FC))
         cwb = np.array([0.5 * len(tr) / max((yb[tr] == c).sum(), 1) for c in (0, 1)],
                        np.float32)
-        for nm, F in [("lossy_A_margin", FA), ("lossy_B_margin_tel", FB)]:
+        for nm, F in lossy_runs:
             lo = fit(LogisticML(F.shape[1], 2), F[tr, None, :].astype(np.float32),
                      yb[tr], F[te, None, :].astype(np.float32),
                      task="cls", epochs=200, lr=0.05, cw=cwb)
@@ -370,11 +393,18 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
                         "healthy_FA": float((p[hm] == 1).mean()),
                         "stressed_healthy_FA": float((p[sh] == 1).mean()) if sh.any() else None,
                         "fault_recall": float((p[yb[te] == 1] == 1).mean())}
-            print(f"   {nm:18s}: acc={out3[nm]['acc']:.3f}  "
+            if sigw is not None:
+                wm = hm & (sigw[te] >= 150.0)
+                out3[nm]["warped_healthy_FA"] = (float((p[wm] == 1).mean())
+                                                 if wm.any() else None)
+            print(f"   {nm:25s}: acc={out3[nm]['acc']:.3f}  "
                   f"healthyFA={out3[nm]['healthy_FA']:.3f}  "
                   f"stressed-healthyFA={out3[nm]['stressed_healthy_FA']}  "
-                  f"recall={out3[nm]['fault_recall']:.3f}")
+                  + (f"warped-healthyFA={out3[nm].get('warped_healthy_FA')}  "
+                     if sigw is not None else "")
+                  + f"recall={out3[nm]['fault_recall']:.3f}")
         results["telemetry_ablation_v2"] = out3
+        json.dump(results, open(res_path, "w"), indent=2)
         _lossy_plot(mar, temp, yb, os.path.join(plots, "lossy_confounder_v2.png"))
 
     # ---- 4. open-set: leave-one-fault-class-out ----
@@ -435,7 +465,7 @@ def run(data_dir, epochs=60, exps=("1", "2", "3", "4", "5")):
         results["severity"][kind] = {"mae_norm": mae, "r2": r2, "n_test": int(len(rte))}
         print(f"   {kind}: MAE(norm)={mae:.3f}  R2={r2:.3f}  (n={len(rte)})")
 
-    json.dump(results, open(os.path.join(data_dir, "results_v2.json"), "w"), indent=2)
+    json.dump(results, open(res_path, "w"), indent=2)
     print(f"\nresults -> {os.path.join(data_dir, 'results_v2.json')}")
     return results
 

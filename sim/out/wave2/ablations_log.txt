@@ -1,0 +1,39 @@
+
+[6] temperature holdout (train never sees the test band):
+   extrap_hot  A_waveform_only   : acc=0.691  healthyFA=0.734  stressedFA=0.7342192691029901  (train 3726 / test 1564)
+   extrap_hot  B_plus_telemetry  : acc=0.770  healthyFA=0.399  stressedFA=0.39867109634551495  (train 3726 / test 1564)
+   interp_band A_waveform_only   : acc=0.806  healthyFA=0.216  stressedFA=0.178743961352657  (train 3747 / test 1543)
+   interp_band B_plus_telemetry  : acc=0.815  healthyFA=0.163  stressedFA=0.16908212560386474  (train 3747 / test 1543)
+
+[7] telemetry sensor noise (does FA reduction survive imperfect sensors?):
+   lossy clean               : FA=0.039+-0.040  stressedFA=0.036+-0.041  recall=0.658
+   lossy dts1C_v0.5pct       : FA=0.035+-0.035  stressedFA=0.038+-0.040  recall=0.653
+   lossy dts2C_v1pct         : FA=0.055+-0.045  stressedFA=0.071+-0.057  recall=0.652
+   lossy dts5C_v2pct         : FA=0.081+-0.063  stressedFA=0.109+-0.087  recall=0.657
+   lossy undersampled_droop  : FA=0.095+-0.080  stressedFA=0.114+-0.098  recall=0.667
+   lossy train-clean/test-noisy(2C,1%): FA=0.150  stressedFA=0.155  recall=0.717
+   CNN  B+noisy tel (2C,1%) : acc=0.795  healthyFA=0.402  stressedFA=0.324
+
+[8] per-class diagnosability (P/R/F1, confusion pairs, family collapse):
+   healthy                  P=0.762  R=0.759  F1=0.761  (n=266)
+   resistive_open           P=0.626  R=0.642  F1=0.634  (n=120)
+   bridge_short             P=0.665  R=0.968  F1=0.788  (n=125)
+   crosstalk_cap            P=0.957  R=1.000  F1=0.978  (n=112)
+   bump_void_aging          P=0.752  R=0.877  F1=0.810  (n=114)
+   supply_droop             P=1.000  R=0.983  F1=0.992  (n=121)
+   hotspot                  P=0.798  R=0.716  F1=0.755  (n=116)
+   impedance_discontinuity  P=0.685  R=0.420  F1=0.521  (n=119)
+   r_drift                  P=0.905  R=0.768  F1=0.831  (n=112)
+   c_drift                  P=1.000  R=0.949  F1=0.974  (n=118)
+   top confusion pairs (true -> predicted):
+     impedance_discontinuity  -> healthy                  57
+     healthy                  -> bridge_short             42
+     hotspot                  -> resistive_open           30
+     resistive_open           -> bump_void_aging          19
+     healthy                  -> impedance_discontinuity  18
+     resistive_open           -> hotspot                  16
+     r_drift                  -> resistive_open           13
+     impedance_discontinuity  -> bridge_short             11
+   10-class acc=0.803  ->  6-family acc=0.883  (41% of errors stay inside the same eye-signature family)
+
+results -> out/wave2/results_v2.json

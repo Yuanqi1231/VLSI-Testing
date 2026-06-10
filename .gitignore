@@ -37,3 +37,7 @@ slides/*.out
 slides/*.snm
 slides/*.toc
 slides/*.vrb
+
+# v3 mechanical dataset (re-create via run_wave2.py --mech): CSV + raw waveforms
+sim/out/wave3/waveforms.csv
+sim/out/wave3/raw/

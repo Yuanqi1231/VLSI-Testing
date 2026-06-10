@@ -185,10 +185,14 @@ def _emit_line(lines, cfg, p, pwl, defect, is_victim, active=False, vrm_scale=1.
     for d in defects:
         if d["kind"] == "c_drift":
             cdrift *= 1.0 + d["drift_c"]
-    Rseg = cfg.r_per_mm * cfg.len_mm / N + radd
+    # global mechanical stress (CTE + warpage): Cu gauge factor on every ohmic
+    # element, plus an elastic corner-bump contact term from package bow (M1/M5)
+    kmet = physics.metal_stress_scale(cfg)
+    Rseg = (cfg.r_per_mm * cfg.len_mm / N) * kmet + radd
     Lseg = cfg.l_per_mm * cfg.len_mm / N
     Cnode = cfg.c_per_mm * cfg.len_mm / N * cdrift
-    Rb, Lb, Cb = cfg.r_bump, cfg.l_bump, cfg.c_bump
+    Rb = cfg.r_bump * kmet + physics.r_bump_warp_ohm(cfg)
+    Lb, Cb = cfg.l_bump, cfg.c_bump
 
     # --- driver ---
     if active and is_victim:
@@ -196,11 +200,12 @@ def _emit_line(lines, cfg, p, pwl, defect, is_victim, active=False, vrm_scale=1.
         lines.append(f"V{p}drv {p}din 0 {pwl}")
         _emit_tx_active(lines, cfg, p, vrm_scale=vrm_scale)
     else:
-        # ideal PWL swing through TEMPERATURE-dependent output resistance Ron(T)
-        # (mobility degradation -- the dominant way T closes a matched link's eye)
+        # ideal PWL swing through output resistance Ron(T, sigma): temperature
+        # mobility degradation (the dominant way T closes a matched link's eye)
+        # x the mean piezoresistive drive shift (stress, sat-derated)
         lines.append(f"V{p}drv {p}din 0 {pwl}")
         _emit_r(lines, cfg, f"{p}on", f"{p}din", f"{p}txo",
-                physics.r_on_temp(cfg), noisy=noisy)
+                physics.r_on_passive(cfg), noisy=noisy)
 
     # --- tx micro-bump (R uses Cu tc1 so temperature scales loss) ---
     lines.append(f"R{p}bt {p}txo {p}bt1 {Rb:.6e} rcu")
