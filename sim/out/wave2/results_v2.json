@@ -1,0 +1,181 @@
+{
+  "n": 6000,
+  "n_concurrent": 710,
+  "classes": [
+    "healthy",
+    "resistive_open",
+    "bridge_short",
+    "crosstalk_cap",
+    "bump_void_aging",
+    "supply_droop",
+    "hotspot",
+    "impedance_discontinuity",
+    "r_drift",
+    "c_drift"
+  ],
+  "epochs": 60,
+  "multilabel": {
+    "logistic_RX": {
+      "exact_match": 0.0006662225183211193,
+      "macro_f1": 0.27785384051657425,
+      "healthy_FA": 1.0,
+      "fault_detect_recall": 1.0,
+      "per_class_f1": [
+        0.241,
+        0.215,
+        0.188,
+        0.183,
+        0.758,
+        0.274,
+        0.212,
+        0.21,
+        0.219
+      ]
+    },
+    "cnn_RX": {
+      "exact_match": 0.5416389073950699,
+      "macro_f1": 0.7177868515361486,
+      "healthy_FA": 0.556390977443609,
+      "fault_detect_recall": 0.9255060728744939,
+      "per_class_f1": [
+        0.581,
+        0.79,
+        0.969,
+        0.496,
+        0.861,
+        0.679,
+        0.443,
+        0.667,
+        0.975
+      ]
+    },
+    "cnn_RX_TX": {
+      "exact_match": 0.5256495669553631,
+      "macro_f1": 0.7233607373773183,
+      "healthy_FA": 0.706766917293233,
+      "fault_detect_recall": 0.9352226720647774,
+      "per_class_f1": [
+        0.574,
+        0.811,
+        0.99,
+        0.529,
+        0.878,
+        0.681,
+        0.4,
+        0.688,
+        0.959
+      ]
+    },
+    "cnn_RX_TX_tel": {
+      "exact_match": 0.5916055962691539,
+      "macro_f1": 0.7245959205023044,
+      "healthy_FA": 0.5075187969924813,
+      "fault_detect_recall": 0.902834008097166,
+      "per_class_f1": [
+        0.529,
+        0.805,
+        0.981,
+        0.539,
+        0.975,
+        0.697,
+        0.36,
+        0.673,
+        0.961
+      ]
+    }
+  },
+  "pattern_generalization": {
+    "n_test": 1519,
+    "n_test_seeds": 32,
+    "cnn_RX": {
+      "exact_match": 0.5806451612903226,
+      "macro_f1": 0.717043314992921,
+      "healthy_FA": 0.39015151515151514,
+      "fault_detect_recall": 0.9171314741035856,
+      "per_class_f1": [
+        0.576,
+        0.819,
+        0.994,
+        0.495,
+        0.883,
+        0.609,
+        0.475,
+        0.679,
+        0.924
+      ]
+    },
+    "cnn_RX_TX": {
+      "exact_match": 0.5128373930217248,
+      "macro_f1": 0.7130071039216118,
+      "healthy_FA": 0.7386363636363636,
+      "fault_detect_recall": 0.951394422310757,
+      "per_class_f1": [
+        0.566,
+        0.816,
+        0.987,
+        0.46,
+        0.884,
+        0.727,
+        0.395,
+        0.648,
+        0.933
+      ]
+    }
+  },
+  "telemetry_ablation_v2": {
+    "A_waveform_only": {
+      "acc": 0.7891156462585034,
+      "healthy_FA": 0.23684210526315788,
+      "stressed_healthy_FA": 0.2810810810810811
+    },
+    "B_plus_telemetry": {
+      "acc": 0.8027210884353742,
+      "healthy_FA": 0.24060150375939848,
+      "stressed_healthy_FA": 0.22162162162162163
+    },
+    "lossy_A_margin": {
+      "acc": 0.7081945369753497,
+      "healthy_FA": 0.3609022556390977,
+      "stressed_healthy_FA": 0.49222797927461137,
+      "fault_recall": 0.7230769230769231
+    },
+    "lossy_B_margin_tel": {
+      "acc": 0.7495003331112592,
+      "healthy_FA": 0.09398496240601503,
+      "stressed_healthy_FA": 0.09326424870466321,
+      "fault_recall": 0.7157894736842105
+    }
+  },
+  "open_set": {
+    "bridge_short": {
+      "auroc_unknown": 0.6215498885367828,
+      "n_unknown": 501,
+      "mean_conf_known": 0.7679410576820374,
+      "mean_conf_unknown": 0.6944903135299683
+    },
+    "hotspot": {
+      "auroc_unknown": 0.559345377075286,
+      "n_unknown": 462,
+      "mean_conf_known": 0.8231900930404663,
+      "mean_conf_unknown": 0.8323417901992798
+    },
+    "c_drift": {
+      "auroc_unknown": 0.3033765231198407,
+      "n_unknown": 473,
+      "mean_conf_known": 0.8060396909713745,
+      "mean_conf_unknown": 0.9200016856193542
+    }
+  },
+  "severity": {
+    "r_drift": {
+      "mae_norm": 0.07589316368103027,
+      "r2": 0.8936487852275117,
+      "n_test": 112
+    },
+    "c_drift": {
+      "mae_norm": 0.07137226313352585,
+      "r2": 0.9082001085649055,
+      "n_test": 118
+    }
+  }
+}

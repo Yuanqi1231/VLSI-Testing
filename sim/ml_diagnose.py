@@ -203,9 +203,11 @@ def lossy_ablation(X, valid, y, classes, temp, vdr, tr, te, h, data_dir):
 
 def _lossy_plot(mar, temp, yb, h, path):
     fig, ax = plt.subplots(figsize=(7.5, 5.5))
-    for lab, c, name in [(0, "#2ca02c", "healthy"), (1, "#d62728", "faulty")]:
+    # draw faulty FIRST so the (fewer) healthy dots stay visible on top
+    for lab, c, name, z in [(1, "#d62728", "faulty", 2), (0, "#2ca02c", "healthy", 3)]:
         m = yb == lab
-        ax.scatter(mar[m] * 1e3, temp[m], c=c, alpha=0.5, s=22, label=name)
+        ax.scatter(mar[m] * 1e3, temp[m], c=c, alpha=0.55, s=22, label=name,
+                   zorder=z, edgecolors="white", linewidths=0.3)
     ax.axvspan(390, 470, color="grey", alpha=0.12)
     ax.set_xlabel("eye margin [mV]  (the only runtime scalar)")
     ax.set_ylabel("temperature [C]  (telemetry)")

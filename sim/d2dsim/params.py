@@ -71,6 +71,16 @@ class Config:
     tstep: float = 1e-12       # transient/linearize step [s] (~UI/62)
     settle_bits: int = 8       # leading bits ignored while the channel fills
 
+    # ---- TX launch jitter (benign eye-closing nuisance, absent = ideal edges) ----
+    # Real links lose timing margin to TX jitter even when healthy; without it the
+    # only eye-closing mechanisms are faults/temperature, which overstates how
+    # separable faults are. Per-transition launch offset = RJ + DCD + SJ.
+    rj_sigma_ps: float = 0.0   # random jitter sigma [ps] (gaussian per transition)
+    dcd_ps: float = 0.0        # duty-cycle distortion [ps]: rising +d/2, falling -d/2
+    sj_amp_ps: float = 0.0     # sinusoidal (periodic) jitter amplitude [ps]
+    sj_freq_hz: float = 1e8    # sinusoidal jitter frequency [Hz]
+    jitter_seed: int = 0       # RNG seed for the per-edge RJ draw
+
     # ---- transient noise (resistor thermal EMF, time-domain trnoise) ----
     # A trnoise voltage source is placed in series with each victim resistor with
     # white RMS = noise_gain * sqrt(4 k T R / (2*tstep)).  The sqrt(4kTR) is the

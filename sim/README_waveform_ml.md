@@ -51,3 +51,47 @@ python3 -c "from d2dsim.wave_campaign import run_wave_campaign; run_wave_campaig
 - **固定 TX 序列**：所有样本同一 PRBS，使故障+噪声为唯一变量，且沿/平台掩膜对所有样本一致。
 - **故障跨全温区**：避免“高温⇒健康”的标签捷径，保证混杂结论非伪。
 - **观测真实性**：原始波形属诊断/后硅态；运行时真实可得的是有损标量——故区分两种观测体制。
+
+---
+
+# v2 数据集（采样式操作空间，2026-06-10）
+
+针对 v1 的三处批评（固定码型、healthy 独占 45/65/100 °C 的温度支撑泄漏、串行生成慢）重建：
+
+```bash
+# 1) 并行生成（8 worker，~290 runs/min；6000 行约 21 分钟）
+~/miniconda3/envs/drl_hw2/bin/python run_wave2.py --out out/wave2 --n-rows 6000 --n-bits 160 --workers 8
+# 2) 训练 + 全部 v2 实验
+~/miniconda3/envs/drl_hw2/bin/python ml_diagnose_v2.py --data out/wave2
+```
+
+## 与 v1 的差异
+- **温度**：全部类别 `T ~ U(27,110)`，消除温度支撑泄漏；严重度连续（R 类对数均匀）、位置随机。
+- **工作负载变化**：victim/aggressor PRBS 种子逐行随机（`seed_v` 存于 CSV，可重建 TX 比特并作为
+  模型的条件输入通道）；benign droop `~U(0,0.12)` 与噪声种子去相关。
+- **滋扰（nuisance，非标签）**：逐行通道制造偏差（RLGC/凸点/Ron/Crx 乘性 ±5–15%）+
+  TX 发送抖动（RJ 0.2–1.2 ps、DCD ±1 ps、SJ 0–1.2 ps @50–300 MHz）。
+- **并发故障**：15% 故障行注入两个不同故障，标签 `a+b` → 多标签目标（healthy=全零）。
+- **原始波形保真**：每行完整 1 ps 网格波形存 `out/wave2/raw/w#####.f32`（小端 float32，
+  t0/dt/n 见 `scenarios.jsonl`）；CSV 仍为 8 样/UI 重采样网格。
+- **眼度量列**：CSV 含 `eye_height_V / eye_width_ps / ber_log10`（与 v1 特征定义一致）。
+
+## v2 实验（ml_diagnose_v2.py → results_v2.json）
+1. 多标签诊断：logistic vs CNN(RX) vs CNN(RX+TX 条件) vs +遥测。
+2. 码型泛化：测试集 = 未见过的 PRBS 种子（按 seed_v 划分）。
+3. 无泄漏遥测消融：单故障 10 类 CNN A/B + 有损标量 A/B（v1 头条结论的复检）。
+4. 开集检测：留一故障类，max-softmax 未知类 AUROC。
+5. 严重度回归（单故障 r_drift / c_drift）。
+
+## v2 主要结果（6000 样本；results_v2.json）
+- **无泄漏遥测消融（核心结论复检通过）**：完整波形 0.789→0.803（遥测收益小）；有损标量体制
+  高应力健康误报 **0.49→0.09**（检出率不变 ~0.72）。v1 的 37.5%→0% 含泄漏放大；v2 数值更可信。
+- **多标签（阈值经验证集校准）**：CNN exact 0.54–0.59 / macro-F1 0.72；逻辑回归 exact 0.001
+  （并发故障的非线性叠加，线性模型完全失效）。健康 FA 偏高（9 个检测位的并集）→ 部署应分层：
+  先二分类健康门（FA 0.094），再做根因归属。
+- **码型泛化**：未见 PRBS 种子上 exact 0.581 ≈ 随机划分 0.542 —— 跨随机码型训练已足够，
+  TX 条件输入无一致增益（不必要）。
+- **开集（负结果）**：max-softmax 留一类 AUROC 0.62/0.56/0.30 —— 未知故障被自信误判为相近
+  已知类；需显式 OOD（后续工作）。
+- **严重度回归稳健**：r_drift R²=0.894、c_drift R²=0.908（全部滋扰下；v1 c_drift 0.998 部分
+  来自离散网格可插值性）。

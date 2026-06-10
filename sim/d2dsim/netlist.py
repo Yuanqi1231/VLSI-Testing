@@ -10,11 +10,17 @@ a known ground-truth label and position.  Two builders are provided:
   build_tdr()     -> source-matched step for reflectometry (SREL/TDR signature)
 """
 import math
+import random
 
 from .params import Config
 from . import physics
 
 K_BOLTZ = 1.380649e-23   # Boltzmann constant [J/K]
+
+
+def _as_defects(defect):
+    """Normalize the defect argument to a list (v2 supports concurrent faults)."""
+    return list(defect) if isinstance(defect, (list, tuple)) else [defect]
 
 
 # -----------------------------------------------------------------------------
@@ -47,11 +53,30 @@ def _emit_r(lines, cfg, name, n1, n2, R, model="", noisy=False):
 # -----------------------------------------------------------------------------
 # stimulus
 # -----------------------------------------------------------------------------
-def bits_to_pwl(bits, ui, tr, vlo, vhi, swing_scale=1.0):
+def edge_jitter_offsets(bits, ui, rj_s=0.0, dcd_s=0.0, sj_amp_s=0.0,
+                        sj_freq=1e8, seed=0):
+    """Per-transition launch-time offsets [s], keyed by the transition bit index.
+
+    RJ: gaussian (sigma rj_s) per edge; DCD: rising edges +dcd/2, falling -dcd/2;
+    SJ: sinusoid of amplitude sj_amp_s at sj_freq sampled at the nominal edge time.
+    """
+    rng = random.Random(seed)
+    off = {}
+    for i in range(1, len(bits)):
+        if bits[i] != bits[i - 1]:
+            dt = rng.gauss(0.0, rj_s) if rj_s > 0 else 0.0
+            dt += 0.5 * dcd_s if bits[i] == 1 else -0.5 * dcd_s
+            dt += sj_amp_s * math.sin(2.0 * math.pi * sj_freq * (i * ui))
+            off[i] = dt
+    return off
+
+
+def bits_to_pwl(bits, ui, tr, vlo, vhi, swing_scale=1.0, jitter=None):
     """Piecewise-linear waveform for a bit stream with finite rise/fall `tr`.
 
     Only emits breakpoints at transitions (holds elsewhere) -> compact PWL.
     `swing_scale` < 1 models a drooping supply reducing the launched swing.
+    `jitter` (from edge_jitter_offsets) shifts each transition's launch time.
     """
     def lvl(b):
         return vlo + (vhi - vlo) * b * swing_scale
@@ -59,7 +84,7 @@ def bits_to_pwl(bits, ui, tr, vlo, vhi, swing_scale=1.0):
     pts = [(0.0, lvl(bits[0]))]
     for i in range(1, len(bits)):
         if bits[i] != bits[i - 1]:
-            tb = i * ui
+            tb = i * ui + (jitter.get(i, 0.0) if jitter else 0.0)
             pts.append((tb - tr / 2.0, lvl(bits[i - 1])))
             pts.append((tb + tr / 2.0, lvl(bits[i])))
     pts.append((len(bits) * ui, lvl(bits[-1])))
@@ -151,11 +176,15 @@ def _emit_line(lines, cfg, p, pwl, defect, is_victim, active=False, vrm_scale=1.
     """
     N = cfg.n_seg
     noisy = cfg.noise_on and is_victim
+    defects = _as_defects(defect) if is_victim else []
     # continuous distributed drifts (victim only):
     #   r_drift = TOTAL extra series R [ohm] spread over the ladder (distributed aging)
     #   c_drift = multiplicative shunt-C swell (edge slowing)
-    radd = defect["drift_r"] / N if (is_victim and defect["kind"] == "r_drift") else 0.0
-    cdrift = 1.0 + defect["drift_c"] if (is_victim and defect["kind"] == "c_drift") else 1.0
+    radd = sum(d["drift_r"] for d in defects if d["kind"] == "r_drift") / N
+    cdrift = 1.0
+    for d in defects:
+        if d["kind"] == "c_drift":
+            cdrift *= 1.0 + d["drift_c"]
     Rseg = cfg.r_per_mm * cfg.len_mm / N + radd
     Lseg = cfg.l_per_mm * cfg.len_mm / N
     Cnode = cfg.c_per_mm * cfg.len_mm / N * cdrift
@@ -184,18 +213,19 @@ def _emit_line(lines, cfg, p, pwl, defect, is_victim, active=False, vrm_scale=1.
         lseg_k = Lseg
         extra = ""  # per-instance options (e.g. hotspot temperature)
 
-        pos = defect["position"]
-        if is_victim and defect["kind"] == "resistive_open" and k == pos:
-            rseg_k += defect["r_open"]                       # series R adds delay/loss
-        if is_victim and defect["kind"] == "bump_void_aging" and k == pos:
-            rseg_k += defect["r_open"]                       # slow drift = growing series R
-        if is_victim and defect["kind"] == "impedance_discontinuity" and pos <= k < pos + 3:
-            lseg_k *= defect["z_factor"]                     # Z step over a 3-segment span
-        if is_victim and defect["kind"] == "hotspot" and pos - 2 <= k <= pos + 2:
-            # hot region (5 segments): pinned hot AND locally degraded (void/EM self-heat).
-            # local R scales with overheat so the thermal event is eye-detectable.
-            extra = f" temp={defect['hot_t']:.3f}"
-            rseg_k += max(0.0, (defect["hot_t"] - 90.0) * 2.0) / 5.0
+        for d in defects:
+            pos = d["position"]
+            if d["kind"] == "resistive_open" and k == pos:
+                rseg_k += d["r_open"]                        # series R adds delay/loss
+            if d["kind"] == "bump_void_aging" and k == pos:
+                rseg_k += d["r_open"]                        # slow drift = growing series R
+            if d["kind"] == "impedance_discontinuity" and pos <= k < pos + 3:
+                lseg_k *= d["z_factor"]                      # Z step over a 3-segment span
+            if d["kind"] == "hotspot" and pos - 2 <= k <= pos + 2:
+                # hot region (5 segments): pinned hot AND locally degraded (void/EM
+                # self-heat). Local R scales with overheat so the event is detectable.
+                extra = f" temp={d['hot_t']:.3f}"
+                rseg_k += max(0.0, (d["hot_t"] - 90.0) * 2.0) / 5.0
 
         _emit_r(lines, cfg, f"{p}{k}", f"{p}n{k}", f"{p}m{k}", rseg_k,
                 model=f" rcu{extra}", noisy=noisy)
@@ -222,7 +252,10 @@ def _emit_line(lines, cfg, p, pwl, defect, is_victim, active=False, vrm_scale=1.
 def _emit_coupling(lines, cfg, defect):
     """Cc (and optional mutual K) between victim 'v' and aggressors 'a1','a2'."""
     N = cfg.n_seg
-    xfac = defect["xtalk_factor"] if defect["kind"] == "crosstalk_cap" else 1.0
+    xfac = 1.0
+    for d in _as_defects(defect):
+        if d["kind"] == "crosstalk_cap":
+            xfac *= d["xtalk_factor"]
     Ccnode = cfg.cc_per_mm * cfg.len_mm / N * xfac
     aggs = [f"a{i+1}" for i in range(cfg.n_agg)]
     for a in aggs:
@@ -247,22 +280,33 @@ def build_channel(cfg, defect, bits_v, bits_a1, bits_a2,
     rise/fall asymmetry), dec.dat (slicer decision), vdd.dat (PDN rail).
     """
     active = cfg.active_frontend
+    defects = _as_defects(defect)
     swing = 1.0 - cfg.vdroop_benign                  # benign (observable) workload droop
     vrm_scale = 1.0
-    if defect["kind"] == "supply_droop":
-        if active:
-            vrm_scale = 1.0 - defect["droop_frac"]   # physical: lower the PDN rail
-        else:
-            swing *= 1.0 - defect["droop_frac"]       # fault droop on top of benign droop
+    for d in defects:
+        if d["kind"] == "supply_droop":
+            if active:
+                vrm_scale *= 1.0 - d["droop_frac"]   # physical: lower the PDN rail
+            else:
+                swing *= 1.0 - d["droop_frac"]        # fault droop on top of benign droop
+
+    # victim TX launch jitter (benign nuisance; zero amplitudes -> exact v1 PWL)
+    jit = None
+    if cfg.rj_sigma_ps > 0 or cfg.dcd_ps != 0 or cfg.sj_amp_ps > 0:
+        jit = edge_jitter_offsets(bits_v, cfg.ui, cfg.rj_sigma_ps * 1e-12,
+                                  cfg.dcd_ps * 1e-12, cfg.sj_amp_ps * 1e-12,
+                                  cfg.sj_freq_hz, cfg.jitter_seed)
 
     # victim launch: 0/1 logic for the active gate, else a 0..vdd analog swing
     vhi_v = 1.0 if active else cfg.vdd
-    pwl_v = _pwl_str(bits_to_pwl(bits_v, cfg.ui, cfg.tr, 0.0, vhi_v, 1.0 if active else swing))
+    pwl_v = _pwl_str(bits_to_pwl(bits_v, cfg.ui, cfg.tr, 0.0, vhi_v,
+                                 1.0 if active else swing, jitter=jit))
     pwl_a1 = _pwl_str(bits_to_pwl(bits_a1, cfg.ui, cfg.tr, 0.0, cfg.vdd))
     pwl_a2 = _pwl_str(bits_to_pwl(bits_a2, cfg.ui, cfg.tr, 0.0, cfg.vdd))
 
-    L = [f"* D2D interconnect link  | defect={defect['kind']} "
-         f"pos={defect.get('position')} temp={cfg.temp_c}C rate={cfg.rate/1e9:g}GT/s "
+    kinds = "+".join(d["kind"] for d in defects)
+    L = [f"* D2D interconnect link  | defect={kinds} "
+         f"pos={defects[0].get('position')} temp={cfg.temp_c}C rate={cfg.rate/1e9:g}GT/s "
          f"front-end={'active' if active else 'ideal'}"]
     L.append(f".model rcu r (tc1={cfg.tc1_cu:.4e} tc2=0)")
     L.append(f".temp {cfg.temp_c:.3f}")
@@ -280,9 +324,10 @@ def build_channel(cfg, defect, bits_v, bits_a1, bits_a2,
         _emit_line(L, cfg, "a2", pwl_a2, defect, is_victim=False)
     _emit_coupling(L, cfg, defect)
 
-    if defect["kind"] == "bridge_short":
-        pos = defect["position"]
-        L.append(f"Rbrg vn{pos} a1n{pos} {defect['r_bridge']:.6e}")
+    for di, d in enumerate(defects):
+        if d["kind"] == "bridge_short":
+            pos = d["position"]
+            L.append(f"Rbrg{di} vn{pos} a1n{pos} {d['r_bridge']:.6e}")
 
     tstop = (cfg.n_bits + 2) * cfg.ui
     L += [".control", "set noaskquit"]
@@ -307,6 +352,7 @@ def build_tx_probe(cfg, defect, probe_file="txp.dat"):
     pull-down edge times -- the stress fingerprint -- can be measured cleanly.
     Returns (netlist, t_rise_start, t_fall_start) window hints.
     """
+    defect = _as_defects(defect)[0]      # probe characterizes the primary fault only
     ui = cfg.ui
     tr = cfg.tr
     t_hi = 10 * ui            # rising edge
@@ -344,6 +390,7 @@ def build_tdr(cfg, defect, tdr_file="tdr.dat"):
     """Source-matched step into the victim channel; record the launch node so
     that reflections from an injected discontinuity appear (SREL/TDR, DEEP_SIM s6.2a).
     RX end is left high-impedance (pad C only)."""
+    defect = _as_defects(defect)[0]      # TDR signature of the primary fault only
     t0 = 5 * cfg.ui
     pts = [(0.0, 0.0), (t0, 0.0), (t0 + cfg.tr, cfg.vdd)]
     pwl = _pwl_str(pts)

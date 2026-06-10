@@ -1,0 +1,34 @@
+{
+  "rule_vs_learned": {
+    "rule_margin_only": {
+      "best": {
+        "acc": 0.8241172551632245,
+        "FA": 0.9736842105263158,
+        "recall": 0.9959514170040485
+      },
+      "zero_FA": {
+        "recall": 0.4647773279352227,
+        "acc": 0.5596269153897402
+      }
+    },
+    "learned_margin_tel": {
+      "best": {
+        "acc": 0.8227848101265823,
+        "FA": 1.0,
+        "recall": 1.0
+      },
+      "zero_FA": {
+        "recall": 0.6105263157894737,
+        "acc": 0.6795469686875416
+      }
+    }
+  },
+  "handcrafted_logistic_acc": 0.6613756613756614,
+  "handcrafted_mlp_acc": 0.7105064247921391,
+  "raw_logistic_acc": 0.22071050642479215,
+  "rootcause_from_scalar": {
+    "majority_floor": 0.20105820105820105,
+    "margin_only_acc": 0.2214663643235072,
+    "margin_tel_acc": 0.20408163265306123
+  }
+}

@@ -17,6 +17,12 @@ sim/out/wave_quick/
 sim/out/dataset.csv
 sim/out/dataset_quick.csv
 
+# v2 dataset (re-create via run_wave2.py): resampled CSV + full-resolution raw waveforms
+sim/out/wave2/waveforms.csv
+sim/out/wave2/raw/
+sim/out/_v2cal/
+**/_work_wave2/
+
 # Logs and LaTeX build artifacts
 *.log
 *.aux
